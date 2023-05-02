@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="zh-CN" color-mode="light">
+
+  <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  
+  <meta name="author" content="werbenhu" />
+  <meta name="description" content="" />
+  
+  
+  <title>
+    
+      关于Copy-on-write的理解 
+      
+      
+      |
+    
+     werbenhu
+  </title>
+
+  
+    <link rel="apple-touch-icon" href="/images/werben.png">
+    <link rel="icon" href="/images/werben.png">
+  
+
+  <!-- Raleway-Font -->
+  <link href="https://fonts.googleapis.com/css?family=Raleway&display=swap" rel="stylesheet">
+
+  <!-- hexo site css -->
+  <link rel="stylesheet" href="/css/main.css" />
+  <link rel="stylesheet" href="//at.alicdn.com/t/font_1886449_67xjft27j1l.css" />
+  <!-- 代码块风格 -->
+  
+
+  <!-- jquery3.3.1 -->
+  
+    <script defer type="text/javascript" src="/plugins/jquery.min.js"></script>
+  
+
+  <!-- fancybox -->
+  
+    <link href="/plugins/jquery.fancybox.min.css" rel="stylesheet">
+    <script defer type="text/javascript" src="/plugins/jquery.fancybox.min.js"></script>
+  
+  
+<script src="/js/fancybox.js"></script>
+
+
+  
+
+  
+
+  <script>
+    var html = document.documentElement
+    const colorMode = localStorage.getItem('color-mode')
+    if (colorMode) {
+      document.documentElement.setAttribute('color-mode', colorMode)
+    }
+  </script>
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+
+  <body>
+    <div id="app">
+      <div class="header">
+  <div class="avatar">
+    <a href="/">
+      <!-- 头像取消懒加载，添加no-lazy -->
+      
+        <img src="/images/werben.jpg" alt="">
+      
+    </a>
+    <div class="nickname"><a href="/">werbenhu</a></div>
+  </div>
+  <div class="navbar">
+    <ul>
+      
+        <li class="nav-item" data-path="/">
+          <a href="/">首页</a>
+        </li>
+      
+        <li class="nav-item" data-path="/archives/">
+          <a href="/archives/">归档</a>
+        </li>
+      
+        <li class="nav-item" data-path="/categories/">
+          <a href="/categories/">分类</a>
+        </li>
+      
+        <li class="nav-item" data-path="/tags/">
+          <a href="/tags/">标签</a>
+        </li>
+      
+        <li class="nav-item" data-path="/about/">
+          <a href="/about/">关于我</a>
+        </li>
+      
+        <li class="nav-item" data-path="/about/">
+          <a href="/about/">About</a>
+        </li>
+      
+    </ul>
+  </div>
+</div>
+
+
+<script src="/js/activeNav.js"></script>
+
+
+
+      <div class="flex-container">
+        <!-- 文章详情页，展示文章具体内容，url形式：https://yoursite/文章标题/ -->
+<!-- 同时为「标签tag」，「朋友friend」，「分类categories」，「关于about」页面的承载页面，具体展示取决于page.type -->
+
+
+  <!-- LaTex Display -->
+
+  
+    <script async type="text/javascript" src="/plugins/mathjax/tex-chtml.js"></script>
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']]
+      }
+    }
+  </script>
+
+
+
+
+
+  <!-- clipboard -->
+
+  
+    <script async type="text/javascript" src="/plugins/clipboard.min.js"></script>
+  
+  
+<script src="/js/codeCopy.js"></script>
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  <!-- 文章内容页 url形式：https://yoursite/文章标题/ -->
+  <div class="container post-details" id="post-details">
+    <div class="post-content">
+      <div class="post-title">关于Copy-on-write的理解</div>
+      <div class="post-attach">
+        <span class="post-pubtime">
+          <i class="iconfont icon-updatetime mr-10" title="更新时间"></i>
+          2023-05-02 22:47:42
+        </span>
+        
+              <span class="post-categories">
+                <i class="iconfont icon-bookmark" title="分类"></i>
+                
+                <span class="span--category">
+                  <a href="/categories/golang/" title="golang">
+                    <b>#</b> golang
+                  </a>
+                </span>
+                
+              </span>
+          
+              <span class="post-tags">
+                <i class="iconfont icon-tags mr-10" title="标签"></i>
+                
+                <span class="span--tag mr-8">
+                  <a href="/tags/golang/" title="golang">
+                    #golang
+                  </a>
+                </span>
+                
+                <span class="span--tag mr-8">
+                  <a href="/tags/Copy-On-Write/" title="Copy-On-Write">
+                    #Copy-On-Write
+                  </a>
+                </span>
+                
+              </span>
+          
+      </div>
+      <div class="markdown-body">
+        <h1 id="定义"><a href="#定义" class="headerlink" title="定义"></a>定义</h1><p>写入时复制（英语：<code>Copy-On-Write</code>，简称COW）是一种计算机程序设计领域的优化策略。其核心思想是，如果有多个调用者（callers）同时请求相同资源（如内存或磁盘上的数据存储），他们会共同获取相同的指针指向相同的资源，直到某个调用者试图修改资源的内容时，系统才会真正复制一份专用副本（private copy）给该调用者，而其他调用者所见到的最初的资源仍然保持不变。这过程对其他的调用者都是透明的。此作法主要的优点是如果调用者没有修改该资源，就不会有副本（private copy）被创建，因此多个调用者只是读取操作时可以共享同一份资源。<em>Copy-On-Write策略用于读多写少的并发场景。</em><br>上面的定义估计第一次看都有点蒙，我这里举一个实际例子，就很好理解了。</p>
+<h2 id="代码1-并发出错"><a href="#代码1-并发出错" class="headerlink" title="代码1 - 并发出错"></a>代码1 - 并发出错</h2><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">&quot;fmt&quot;</span></span><br><span class="line">	<span class="string">&quot;strconv&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> CowMap <span class="keyword">map</span>[<span class="type">int</span>]<span class="type">string</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(c *CowMap)</span></span> Set(key <span class="type">int</span>, value <span class="type">string</span>) &#123;</span><br><span class="line">	(*c)[key] = value</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(c *CowMap)</span></span> Get(key <span class="type">int</span>) <span class="type">string</span> &#123;</span><br><span class="line">	<span class="keyword">return</span> (*c)[key]</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">readLoop</span><span class="params">(c *CowMap)</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> &#123;</span><br><span class="line">		fmt.Println(c.Get(<span class="number">3</span>))</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">writeLoop</span><span class="params">(c *CowMap)</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> i := <span class="number">0</span>; i &lt; <span class="number">10000000</span>; i++ &#123;</span><br><span class="line">		<span class="comment">//修改map的值</span></span><br><span class="line">		c.Set(<span class="number">3</span>, <span class="string">&quot;werben-&quot;</span>+strconv.Itoa(i))</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">	c := <span class="built_in">make</span>(CowMap)</span><br><span class="line">	c.Set(<span class="number">1</span>, <span class="string">&quot;a&quot;</span>)</span><br><span class="line">	c.Set(<span class="number">2</span>, <span class="string">&quot;b&quot;</span>)</span><br><span class="line">	c.Set(<span class="number">3</span>, <span class="string">&quot;c&quot;</span>)</span><br><span class="line"></span><br><span class="line">	<span class="keyword">go</span> readLoop(&amp;c)</span><br><span class="line">	writeLoop(&amp;c)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>运行上面的代码，会出错：<code>fatal error: concurrent map read and map write</code>.<br>因为有两个协程(主协程<code>writeLoop</code>和<code>readLoop</code>协程)同时读写同一个map，而这个map不是线程安全，所以会导致上面的出错。</p>
+<h2 id="代码2-引入读写锁"><a href="#代码2-引入读写锁" class="headerlink" title="代码2-引入读写锁"></a>代码2-引入读写锁</h2><p>为了解决上面的问题我们引入读写锁</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">&quot;fmt&quot;</span></span><br><span class="line">	<span class="string">&quot;strconv&quot;</span></span><br><span class="line">	<span class="string">&quot;sync&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="comment">//读写锁</span></span><br><span class="line"><span class="keyword">var</span> mu sync.RWMutex</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> CowMap <span class="keyword">map</span>[<span class="type">int</span>]<span class="type">string</span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(c *CowMap)</span></span> Set(key <span class="type">int</span>, value <span class="type">string</span>) &#123;</span><br><span class="line">	(*c)[key] = value</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(c *CowMap)</span></span> Get(key <span class="type">int</span>) <span class="type">string</span> &#123;</span><br><span class="line">	<span class="keyword">return</span> (*c)[key]</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">readLoop</span><span class="params">(c *CowMap)</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> &#123;</span><br><span class="line">		<span class="comment">//读的时候上读锁</span></span><br><span class="line">		mu.RLock()</span><br><span class="line">		fmt.Println(c.Get(<span class="number">3</span>))</span><br><span class="line">		mu.RUnlock()</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">writeLoop</span><span class="params">(c *CowMap)</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> i := <span class="number">0</span>; i &lt; <span class="number">10000000</span>; i++ &#123;</span><br><span class="line">		<span class="comment">//写的时候上写锁</span></span><br><span class="line">		mu.Lock()</span><br><span class="line">		c.Set(<span class="number">3</span>, <span class="string">&quot;werben-&quot;</span>+strconv.Itoa(i))</span><br><span class="line">		mu.Unlock()</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">	c := <span class="built_in">make</span>(CowMap)</span><br><span class="line">	c.Set(<span class="number">1</span>, <span class="string">&quot;a&quot;</span>)</span><br><span class="line">	c.Set(<span class="number">2</span>, <span class="string">&quot;b&quot;</span>)</span><br><span class="line">	c.Set(<span class="number">3</span>, <span class="string">&quot;c&quot;</span>)</span><br><span class="line"></span><br><span class="line">	<span class="keyword">go</span> readLoop(&amp;c)</span><br><span class="line">	writeLoop(&amp;c)</span><br><span class="line">&#125;</span><br><span class="line">运行上面的代码，不会报错了。</span><br><span class="line">如果我们将writeLoop()改成如下，每<span class="number">5</span>秒写一次。</span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">writeLoop</span><span class="params">(c *CowMap)</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> i := <span class="number">0</span>; i &lt; <span class="number">10000000</span>; i++ &#123;</span><br><span class="line">		<span class="comment">//每隔5s写一次</span></span><br><span class="line">		time.Sleep(time.Second*<span class="number">5</span>)</span><br><span class="line">		<span class="comment">//写的时候上写锁</span></span><br><span class="line">		mu.Lock()</span><br><span class="line">		c.Set(<span class="number">3</span>, <span class="string">&quot;werben-&quot;</span>+strconv.Itoa(i))</span><br><span class="line">		mu.Unlock()</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>我们看下读写锁的特性：</p>
+<ul>
+<li>读锁不能阻塞读锁</li>
+<li>读锁需要阻塞写锁，直到所有读锁都释放</li>
+<li>写锁需要阻塞读锁，直到所有写锁都释放</li>
+<li>写锁需要阻塞写锁</li>
+</ul>
+<p>只是每隔5秒写一次，但是上面的读锁还是一直不断的上锁解锁，这个在没有写数据的时候，其实都是没有意义的。如果时间更长，比如1天才修改一次，读锁浪费了大量的无用资源。<br>这时候，如果我们用copy-on-write策略，代码如下：</p>
+<h2 id="代码3-Copy-On-Write实现"><a href="#代码3-Copy-On-Write实现" class="headerlink" title="代码3 - Copy-On-Write实现"></a>代码3 - Copy-On-Write实现</h2><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">package</span> main</span><br><span class="line"></span><br><span class="line"><span class="keyword">import</span> (</span><br><span class="line">	<span class="string">&quot;fmt&quot;</span></span><br><span class="line">	<span class="string">&quot;strconv&quot;</span></span><br><span class="line">	<span class="string">&quot;sync&quot;</span></span><br><span class="line">	<span class="string">&quot;sync/atomic&quot;</span></span><br><span class="line">)</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> tmap <span class="keyword">map</span>[<span class="type">int</span>]<span class="type">string</span></span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> CowMap <span class="keyword">struct</span> &#123;</span><br><span class="line">	mu   sync.Mutex</span><br><span class="line">	data atomic.Value</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewCowMap</span><span class="params">()</span></span> *CowMap &#123;</span><br><span class="line">	m := <span class="built_in">make</span>(tmap)</span><br><span class="line">	c := &amp;CowMap&#123;&#125;</span><br><span class="line">	c.data.Store(m)</span><br><span class="line">	<span class="keyword">return</span> c</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(c *CowMap)</span></span> clone() tmap &#123;</span><br><span class="line">	m := <span class="built_in">make</span>(tmap)</span><br><span class="line">	<span class="keyword">for</span> k, v := <span class="keyword">range</span> c.data.Load().(tmap) &#123;</span><br><span class="line">		m[k] = v</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> m</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(c *CowMap)</span></span> Get(key <span class="type">int</span>) (value <span class="type">string</span>, ok <span class="type">bool</span>) &#123;</span><br><span class="line">	value, ok = c.data.Load().(tmap)[key]</span><br><span class="line">	<span class="keyword">return</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(c *CowMap)</span></span> Set(key <span class="type">int</span>, value <span class="type">string</span>) &#123;</span><br><span class="line">	c.mu.Lock()</span><br><span class="line">	<span class="keyword">defer</span> c.mu.Unlock()</span><br><span class="line"></span><br><span class="line">	<span class="comment">//写之前，先拷贝一个副本</span></span><br><span class="line">	<span class="built_in">copy</span> := c.clone()</span><br><span class="line">	<span class="comment">//修改副本</span></span><br><span class="line">	<span class="built_in">copy</span>[key] = value</span><br><span class="line">	<span class="comment">//修改副本数据后，将副本转正</span></span><br><span class="line">	c.data.Store(<span class="built_in">copy</span>)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">readLoop</span><span class="params">(c *CowMap)</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> &#123;</span><br><span class="line">		fmt.Println(c.Get(<span class="number">3</span>))</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">writeLoop</span><span class="params">(c *CowMap)</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> i := <span class="number">0</span>; i &lt; <span class="number">10000000</span>; i++ &#123;</span><br><span class="line">		c.Set(<span class="number">3</span>, <span class="string">&quot;werben-&quot;</span>+strconv.Itoa(i))</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">main</span><span class="params">()</span></span> &#123;</span><br><span class="line">	c := NewCowMap()</span><br><span class="line">	c.Set(<span class="number">1</span>, <span class="string">&quot;a&quot;</span>)</span><br><span class="line">	c.Set(<span class="number">2</span>, <span class="string">&quot;b&quot;</span>)</span><br><span class="line">	c.Set(<span class="number">3</span>, <span class="string">&quot;c&quot;</span>)</span><br><span class="line"></span><br><span class="line">	<span class="keyword">go</span> readLoop(c)</span><br><span class="line">	writeLoop(c)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>在写入之前先拷贝一个副本，对副本进行修改，副本修改之后，将副本转正。这时多个调用者只是读取时就可以不需要上锁了。<br>缺点</p>
+<ul>
+<li>内存占用问题<br>因为Copy-On-Write的写时复制机制，所以在进行写操作的时候，内存里会同时驻扎两个对象的内存。</li>
+<li>数据一致性问题<br>Copy-On-Write策略只能保证数据的最终一致性，不能保证数据的实时一致性。写入数据之后，不能保证马上读取到最新的数据。</li>
+</ul>
+<h2 id="实际应用"><a href="#实际应用" class="headerlink" title="实际应用"></a>实际应用</h2><p>我们来看下在golang官方库btree里是怎么使用Copy-On-Write策略的<br>这个库的官方地址在这里，有兴趣的可以去读一读：<a target="_blank" rel="noopener" href="https://github.com/google/btree">https://github.com/google/btree</a><br>首先在BTree定义里，定义了一个copyOnWriteContext, cow里实际就是保存了一个*node的数组，<br>然后每个node里面也保存了一份cow。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> BTree <span class="keyword">struct</span> &#123;</span><br><span class="line">	degree <span class="type">int</span></span><br><span class="line">	length <span class="type">int</span></span><br><span class="line">	root   *node</span><br><span class="line">	cow    *copyOnWriteContext</span><br><span class="line">&#125;</span><br><span class="line">...</span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> copyOnWriteContext <span class="keyword">struct</span> &#123;</span><br><span class="line">	freelist *FreeList</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">...</span><br><span class="line"><span class="keyword">type</span> FreeList <span class="keyword">struct</span> &#123;</span><br><span class="line">	mu       sync.Mutex</span><br><span class="line">	freelist []*node</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">type</span> node <span class="keyword">struct</span> &#123;</span><br><span class="line">	items    items</span><br><span class="line">	children children</span><br><span class="line">	cow      *copyOnWriteContext</span><br><span class="line">&#125;</span><br><span class="line">BTree有一个Clone方法， 可以看到虽然clone出来一个新的cow2，但是cow1和cow2里指向的freelist却还是都是同一个地址(freelist)。也就是如果只是读取Clone()出来的新BTree，跟原先的是同一份freelist，freelist里面的node如果不修改，则都可以不需要重新拷贝。</span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(t *BTree)</span></span> Clone() (t2 *BTree) &#123;</span><br><span class="line">	<span class="comment">// Create two entirely new copy-on-write contexts.</span></span><br><span class="line">	<span class="comment">// This operation effectively creates three trees:</span></span><br><span class="line">	<span class="comment">//   the original, shared nodes (old b.cow)</span></span><br><span class="line">	<span class="comment">//   the new b.cow nodes</span></span><br><span class="line">	<span class="comment">//   the new out.cow nodes</span></span><br><span class="line">	cow1, cow2 := *t.cow, *t.cow</span><br><span class="line">	out := *t</span><br><span class="line">	t.cow = &amp;cow1</span><br><span class="line">	out.cow = &amp;cow2</span><br><span class="line">	<span class="keyword">return</span> &amp;out</span><br><span class="line">&#125;</span><br><span class="line">当需要修改freelist里面的Node的时候</span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(t *BTree)</span></span> ReplaceOrInsert(item Item) Item &#123;</span><br><span class="line">	<span class="keyword">if</span> item == <span class="literal">nil</span> &#123;</span><br><span class="line">		<span class="built_in">panic</span>(<span class="string">&quot;nil item being added to BTree&quot;</span>)</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> t.root == <span class="literal">nil</span> &#123;</span><br><span class="line">		t.root = t.cow.newNode()</span><br><span class="line">		t.root.items = <span class="built_in">append</span>(t.root.items, item)</span><br><span class="line">		t.length++</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">nil</span></span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">		<span class="comment">//这里判断一下需不需要重新拷贝node</span></span><br><span class="line">		t.root = t.root.mutableFor(t.cow)</span><br><span class="line">		<span class="keyword">if</span> <span class="built_in">len</span>(t.root.items) &gt;= t.maxItems() &#123;</span><br><span class="line">			item2, second := t.root.split(t.maxItems() / <span class="number">2</span>)</span><br><span class="line">			oldroot := t.root</span><br><span class="line">			t.root = t.cow.newNode()</span><br><span class="line">			t.root.items = <span class="built_in">append</span>(t.root.items, item2)</span><br><span class="line">			t.root.children = <span class="built_in">append</span>(t.root.children, oldroot, second)</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	out := t.root.insert(item, t.maxItems())</span><br><span class="line">	<span class="keyword">if</span> out == <span class="literal">nil</span> &#123;</span><br><span class="line">		t.length++</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> out</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">//这里的逻辑就是判断一下，是否需要重新复制node，并修改其值</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(n *node)</span></span> mutableFor(cow *copyOnWriteContext) *node &#123;</span><br><span class="line">	<span class="comment">//判断一下，当前node的cow和BTree里面的cow是不是同一个</span></span><br><span class="line">	<span class="keyword">if</span> n.cow == cow &#123;</span><br><span class="line">		<span class="comment">//如果不是Clone()出来的BTree，则不涉及到拷贝,</span></span><br><span class="line">		<span class="comment">//直接返回当前node,</span></span><br><span class="line">		<span class="keyword">return</span> n</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">//如果是Clone()出来的新BTree，新的BTree里的cow是变动了的，</span></span><br><span class="line">	<span class="comment">//这里要修改这个node,所以这个node的数据需要重新拷贝一份。</span></span><br><span class="line">	out := cow.newNode()</span><br><span class="line">	<span class="keyword">if</span> <span class="built_in">cap</span>(out.items) &gt;= <span class="built_in">len</span>(n.items) &#123;</span><br><span class="line">		out.items = out.items[:<span class="built_in">len</span>(n.items)]</span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">		out.items = <span class="built_in">make</span>(items, <span class="built_in">len</span>(n.items), <span class="built_in">cap</span>(n.items))</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="built_in">copy</span>(out.items, n.items)</span><br><span class="line">	<span class="comment">// Copy children</span></span><br><span class="line">	<span class="keyword">if</span> <span class="built_in">cap</span>(out.children) &gt;= <span class="built_in">len</span>(n.children) &#123;</span><br><span class="line">		out.children = out.children[:<span class="built_in">len</span>(n.children)]</span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">		out.children = <span class="built_in">make</span>(children, <span class="built_in">len</span>(n.children), <span class="built_in">cap</span>(n.children))</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="built_in">copy</span>(out.children, n.children)</span><br><span class="line">	<span class="keyword">return</span> out</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+      </div>
+      
+        <div class="prev-or-next">
+          <div class="post-foot-next">
+            
+              <a href="/2023/05/02/%E4%B8%80%E4%B8%AA%E8%BD%BB%E9%87%8F%E7%BA%A7%E7%9A%84%E4%BA%8B%E4%BB%B6%E5%8F%91%E5%B8%83-%E8%AE%A2%E9%98%85%E6%A1%86%E6%9E%B6%EF%BC%8C%E5%AE%83%E5%8F%AF%E4%BB%A5%E7%AE%80%E5%8C%96-Go-%E5%8D%8F%E7%A8%8B%E4%B9%8B%E9%97%B4%E7%9A%84%E9%80%9A%E4%BF%A1/" target="_self">
+                <i class="iconfont icon-chevronleft"></i>
+                <span>上一页</span>
+              </a>
+            
+          </div>
+          <div class="post-attach">
+            <span class="post-pubtime">
+              <i class="iconfont icon-updatetime mr-10" title="更新时间"></i>
+              2023-05-02 22:47:42
+            </span>
+            
+                  <span class="post-categories">
+                    <i class="iconfont icon-bookmark" title="分类"></i>
+                    
+                    <span class="span--category">
+                      <a href="/categories/golang/" title="golang">
+                        <b>#</b> golang
+                      </a>
+                    </span>
+                    
+                  </span>
+              
+                  <span class="post-tags">
+                    <i class="iconfont icon-tags mr-10" title="标签"></i>
+                    
+                    <span class="span--tag mr-8">
+                      <a href="/tags/golang/" title="golang">
+                        #golang
+                      </a>
+                    </span>
+                    
+                    <span class="span--tag mr-8">
+                      <a href="/tags/Copy-On-Write/" title="Copy-On-Write">
+                        #Copy-On-Write
+                      </a>
+                    </span>
+                    
+                  </span>
+              
+          </div>
+          <div class="post-foot-prev">
+            
+          </div>
+        </div>
+      
+    </div>
+    
+  <div id="btn-catalog" class="btn-catalog">
+    <i class="iconfont icon-catalog"></i>
+  </div>
+  <div class="post-catalog hidden" id="catalog">
+    <div class="title">目录</div>
+    <div class="catalog-content">
+      
+        <ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%AE%9A%E4%B9%89"><span class="toc-text">定义</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BB%A3%E7%A0%811-%E5%B9%B6%E5%8F%91%E5%87%BA%E9%94%99"><span class="toc-text">代码1 - 并发出错</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BB%A3%E7%A0%812-%E5%BC%95%E5%85%A5%E8%AF%BB%E5%86%99%E9%94%81"><span class="toc-text">代码2-引入读写锁</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BB%A3%E7%A0%813-Copy-On-Write%E5%AE%9E%E7%8E%B0"><span class="toc-text">代码3 - Copy-On-Write实现</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%9E%E9%99%85%E5%BA%94%E7%94%A8"><span class="toc-text">实际应用</span></a></li></ol></li></ol>
+      
+    </div>
+  </div>
+
+  
+<script src="/js/catalog.js"></script>
+
+
+
+
+    
+      <div class="comments-container">
+        
+
+
+
+
+
+
+
+      </div>
+    
+  </div>
+
+
+        
+<div class="footer">
+  <div class="social">
+    <ul>
+      
+        <li>
+          <a title="github" target="_blank" rel="noopener" href="https://github.com/werbenhu">
+            <i class="iconfont icon-github"></i>
+          </a>
+        </li>
+      
+    </ul>
+  </div>
+  
+    
+    <div class="footer-more">
+      
+        <a target="_blank" rel="noopener" href="https://github.com/zchengsite/hexo-theme-oranges">Copyright © 2023 werbenhu</a>
+        
+    </div>
+  
+    
+    <div class="footer-more">
+      
+        <a target="_blank" rel="noopener" href="https://github.com/zchengsite/hexo-theme-oranges">Theme by Oranges | Powered by Hexo</a>
+        
+    </div>
+  
+  
+</div>
+
+      </div>
+
+      <div class="tools-bar">
+        <div class="back-to-top tools-bar-item hidden">
+  <a href="javascript: void(0)">
+    <i class="iconfont icon-chevronup"></i>
+  </a>
+</div>
+
+
+<script src="/js/backtotop.js"></script>
+
+
+
+        
+  <div class="search-icon tools-bar-item" id="search-icon">
+    <a href="javascript: void(0)">
+      <i class="iconfont icon-search"></i>
+    </a>
+  </div>
+
+  <div class="search-overlay hidden">
+    <div class="search-content" tabindex="0">
+      <div class="search-title">
+        <span class="search-icon-input">
+          <a href="javascript: void(0)">
+            <i class="iconfont icon-search"></i>
+          </a>
+        </span>
+        
+          <input type="text" class="search-input" id="search-input" placeholder="搜索...">
+        
+        <span class="search-close-icon" id="search-close-icon">
+          <a href="javascript: void(0)">
+            <i class="iconfont icon-close"></i>
+          </a>
+        </span>
+      </div>
+      <div class="search-result" id="search-result"></div>
+    </div>
+  </div>
+
+  <script type="text/javascript">
+    var inputArea = document.querySelector("#search-input")
+    var searchOverlayArea = document.querySelector(".search-overlay")
+
+    inputArea.onclick = function() {
+      getSearchFile()
+      this.onclick = null
+    }
+
+    inputArea.onkeydown = function() {
+      if(event.keyCode == 13)
+        return false
+    }
+
+    function openOrHideSearchContent() {
+      let isHidden = searchOverlayArea.classList.contains('hidden')
+      if (isHidden) {
+        searchOverlayArea.classList.remove('hidden')
+        document.body.classList.add('hidden')
+        // inputArea.focus()
+      } else {
+        searchOverlayArea.classList.add('hidden')
+        document.body.classList.remove('hidden')
+      }
+    }
+
+    function blurSearchContent(e) {
+      if (e.target === searchOverlayArea) {
+        openOrHideSearchContent()
+      }
+    }
+
+    document.querySelector("#search-icon").addEventListener("click", openOrHideSearchContent, false)
+    document.querySelector("#search-close-icon").addEventListener("click", openOrHideSearchContent, false)
+    searchOverlayArea.addEventListener("click", blurSearchContent, false)
+
+    var searchFunc = function (path, search_id, content_id) {
+      'use strict';
+      var $input = document.getElementById(search_id);
+      var $resultContent = document.getElementById(content_id);
+      $resultContent.innerHTML = "<ul><span class='local-search-empty'>首次搜索，正在载入索引文件，请稍后……<span></ul>";
+      $.ajax({
+        // 0x01. load xml file
+        url: path,
+        dataType: "xml",
+        success: function (xmlResponse) {
+          // 0x02. parse xml file
+          var datas = $("entry", xmlResponse).map(function () {
+            return {
+              title: $("title", this).text(),
+              content: $("content", this).text(),
+              url: $("url", this).text()
+            };
+          }).get();
+          $resultContent.innerHTML = "";
+
+          $input.addEventListener('input', function () {
+            // 0x03. parse query to keywords list
+            var str = '<ul class=\"search-result-list\">';
+            var keywords = this.value.trim().toLowerCase().split(/[\s\-]+/);
+            $resultContent.innerHTML = "";
+            if (this.value.trim().length <= 0) {
+              return;
+            }
+            // 0x04. perform local searching
+            datas.forEach(function (data) {
+              var isMatch = true;
+              var content_index = [];
+              if (!data.title || data.title.trim() === '') {
+                data.title = "Untitled";
+              }
+              var orig_data_title = data.title.trim();
+              var data_title = orig_data_title.toLowerCase();
+              var orig_data_content = data.content.trim().replace(/<[^>]+>/g, "");
+              var data_content = orig_data_content.toLowerCase();
+              var data_url = data.url;
+              var index_title = -1;
+              var index_content = -1;
+              var first_occur = -1;
+              // only match artiles with not empty contents
+              if (data_content !== '') {
+                keywords.forEach(function (keyword, i) {
+                  index_title = data_title.indexOf(keyword);
+                  index_content = data_content.indexOf(keyword);
+
+                  if (index_title < 0 && index_content < 0) {
+                    isMatch = false;
+                  } else {
+                    if (index_content < 0) {
+                      index_content = 0;
+                    }
+                    if (i == 0) {
+                      first_occur = index_content;
+                    }
+                    // content_index.push({index_content:index_content, keyword_len:keyword_len});
+                  }
+                });
+              } else {
+                isMatch = false;
+              }
+              // 0x05. show search results
+              if (isMatch) {
+                str += "<li><a href='" + data_url + "' class='search-result-title'>" + orig_data_title + "</a>";
+                var content = orig_data_content;
+                if (first_occur >= 0) {
+                  // cut out 100 characters
+                  var start = first_occur - 20;
+                  var end = first_occur + 80;
+
+                  if (start < 0) {
+                    start = 0;
+                  }
+
+                  if (start == 0) {
+                    end = 100;
+                  }
+
+                  if (end > content.length) {
+                    end = content.length;
+                  }
+
+                  var match_content = content.substr(start, end);
+
+                  // highlight all keywords
+                  keywords.forEach(function (keyword) {
+                    var regS = new RegExp(keyword, "gi");
+                    match_content = match_content.replace(regS, "<span class=\"search-keyword\">" + keyword + "</span>");
+                  });
+
+                  str += "<p class=\"search-result-abstract\">" + match_content + "...</p>"
+                }
+                str += "</li>";
+              }
+            });
+            str += "</ul>";
+            if (str.indexOf('<li>') === -1) {
+              return $resultContent.innerHTML = "<ul><span class='local-search-empty'>没有找到内容，请尝试更换检索词。<span></ul>";
+            }
+            $resultContent.innerHTML = str;
+          });
+        },
+        error: function(xhr, status, error) {
+          $resultContent.innerHTML = ""
+          if (xhr.status === 404) {
+            $resultContent.innerHTML = "<ul><span class='local-search-empty'>未找到search.xml文件，具体请参考：<a href='https://github.com/zchengsite/hexo-theme-oranges#configuration' target='_black'>configuration</a><span></ul>";
+          } else {
+            $resultContent.innerHTML = "<ul><span class='local-search-empty'>请求失败，尝试重新刷新页面或稍后重试。<span></ul>";
+          }
+        }
+      });
+      $(document).on('click', '#search-close-icon', function() {
+        $('#search-input').val('');
+        $('#search-result').html('');
+      });
+    }
+
+    var getSearchFile = function() {
+        var path = "/search.xml";
+        searchFunc(path, 'search-input', 'search-result');
+    }
+  </script>
+
+
+
+
+        
+  <div class="tools-bar-item theme-icon" id="switch-color-scheme">
+    <a href="javascript: void(0)">
+      <i id="theme-icon" class="iconfont icon-moon"></i>
+    </a>
+  </div>
+
+  
+<script src="/js/colorscheme.js"></script>
+
+
+
+
+
+        
+  
+    <div class="share-icon tools-bar-item">
+      <a href="javascript: void(0)" id="share-icon">
+        <i class="iconfont iconshare"></i>
+      </a>
+      <div class="share-content hidden">
+        
+          <a class="share-item" href="https://twitter.com/intent/tweet?text=' + %E5%85%B3%E4%BA%8ECopy-on-write%E7%9A%84%E7%90%86%E8%A7%A3 + '&url=' + http%3A%2F%2Fexample.com%2F2023%2F05%2F02%2F%25E5%2585%25B3%25E4%25BA%258ECopy-on-write%25E7%259A%2584%25E7%2590%2586%25E8%25A7%25A3%2F + '" target="_blank" title="Twitter">
+            <i class="iconfont icon-twitter"></i>
+          </a>
+        
+        
+          <a class="share-item" href="https://www.facebook.com/sharer.php?u=http://example.com/2023/05/02/%E5%85%B3%E4%BA%8ECopy-on-write%E7%9A%84%E7%90%86%E8%A7%A3/" target="_blank" title="Facebook">
+            <i class="iconfont icon-facebooksquare"></i>
+          </a>
+        
+      </div>
+    </div>
+  
+  
+<script src="/js/shares.js"></script>
+
+
+
+      </div>
+    </div>
+  </body>
+</html>
