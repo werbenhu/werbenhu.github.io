@@ -11,8 +11,8 @@
   
   <title>
     
-      标签 
-       : Golang
+      nsq源码-nsqd总体流程 
+      
       
       |
     
@@ -106,93 +106,210 @@
 
 
       <div class="flex-container">
-        <!-- 标签详情页，展示某个标签下的文章列表，url形式：https://yoursite/tags/某个标签/ -->
+        <!-- 文章详情页，展示文章具体内容，url形式：https://yoursite/文章标题/ -->
+<!-- 同时为「标签tag」，「朋友friend」，「分类categories」，「关于about」页面的承载页面，具体展示取决于page.type -->
 
-<div class="container tag-details">
-  <div class="content-title">
-    <h2>
-      <span>Golang</span>
-    </h2>
+
+  <!-- LaTex Display -->
+
+  
+    <script async type="text/javascript" src="/plugins/mathjax/tex-chtml.js"></script>
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']]
+      }
+    }
+  </script>
+
+
+
+
+
+  <!-- clipboard -->
+
+  
+    <script async type="text/javascript" src="/plugins/clipboard.min.js"></script>
+  
+  
+<script src="/js/codeCopy.js"></script>
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  <!-- 文章内容页 url形式：https://yoursite/文章标题/ -->
+  <div class="container post-details" id="post-details">
+    <div class="post-content">
+      <div class="post-title">nsq源码-nsqd总体流程</div>
+      <div class="post-attach">
+        <span class="post-pubtime">
+          <i class="iconfont icon-updatetime mr-10" title="更新时间"></i>
+          2023-05-03 01:06:38
+        </span>
+        
+              <span class="post-categories">
+                <i class="iconfont icon-bookmark" title="分类"></i>
+                
+                <span class="span--category">
+                  <a href="/categories/Golang/" title="Golang">
+                    <b>#</b> Golang
+                  </a>
+                </span>
+                
+              </span>
+          
+              <span class="post-tags">
+                <i class="iconfont icon-tags mr-10" title="标签"></i>
+                
+                <span class="span--tag mr-8">
+                  <a href="/tags/Golang/" title="Golang">
+                    #Golang
+                  </a>
+                </span>
+                
+                <span class="span--tag mr-8">
+                  <a href="/tags/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/" title="源码阅读">
+                    #源码阅读
+                  </a>
+                </span>
+                
+                <span class="span--tag mr-8">
+                  <a href="/tags/Nsq/" title="Nsq">
+                    #Nsq
+                  </a>
+                </span>
+                
+              </span>
+          
+      </div>
+      <div class="markdown-body">
+        <h1 id="nsq源码-nsqd总体流程"><a href="#nsq源码-nsqd总体流程" class="headerlink" title="nsq源码-nsqd总体流程"></a>nsq源码-nsqd总体流程</h1><p>看了一阵子nsq源码，出去细节大体的流程基本算是看明白了<br>下面来总结一下，看下面的图</p>
+<p><img src="/images/1808174-20210312153309318-1977366713.png"></p>
+<p>个人觉得其实只要搞清楚几个Loop，我称为“守护”协程，也就是一直在for… select… 里面跑着不退出的几个关键函数。<br>看上面的图，有几个呢？</p>
+<p>从底层依次往上看</p>
+<ol>
+<li><p>diskqueue.IoLoop()： 我觉得这个第一个要看懂，topic和channel都会用到他来作为磁盘存储消息，关键消息在里面怎么进怎么出，这里也要搞清楚。</p>
+</li>
+<li><p>Topic.MessagePump(): 不断的将topci收到的消息，分发给底下所有的Channel。</p>
+</li>
+<li><p>protocolV2.IOLoop(): 处理客户端通过socket传上来的指令，然后分发处理指令。比如收到PUB指令，将消息丢给topic</p>
+</li>
+<li><p>protocolV2.messagePump(): 不断的将Channel.memoryMsgChan或者diskqueue里面的消息通过socket推给客户端订阅者</p>
+</li>
+<li><p>nsqd.queueScanLoop(): 其实看上面的协程都是成对出现的，也就是消息有进去协程，就应该有消息出来的协程。但是Channel有消息进去的协程，也就是topic的MessagePump这个协程负责将消息给Channel，那么Channel消息出来的协程就是这个nsqd.queueScanLoop()了。他负责将Inflight也就是处理中的消息，推到channel.memoryMsgChan或者diskqueue中。</p>
+</li>
+</ol>
+<p>一个完整的消息进出流程大概就是这样子</p>
+<p>客户端生产者 -&gt; protocolV2.IOLoop() 收到消息<br>-&gt; Topic.PutMessage() 消息传到Topic<br>-&gt; Topic.MessagePump() 消息传到Channel.InFlight<br>-&gt; nsqd.queueScanLoop()<br>-&gt; 消息传到Channel.memoryMsgChan<br>-&gt; protocolV2.messagePump()<br>-&gt; 客户端订阅者</p>
+<p><em>这里有一个很容易搞晕的地方，就是Channel中放消息其实有两块</em></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">type Channel struct &#123;</span><br><span class="line">	... //这一块是存储和持久化，消息最终是从这里出去</span><br><span class="line">	backend BackendQueue</span><br><span class="line">	memoryMsgChan chan *Message</span><br><span class="line">	</span><br><span class="line">	... //这一块可以理解成一个缓存，意思在处理中消息，消息首先到这里</span><br><span class="line">	deferredMessages map[MessageID]*pqueue.Item</span><br><span class="line">	deferredPQ       pqueue.PriorityQueue</span><br><span class="line">	deferredMutex    sync.Mutex</span><br><span class="line">	inFlightMessages map[MessageID]*Message</span><br><span class="line">	inFlightPQ       inFlightPqueue</span><br><span class="line">	inFlightMutex    sync.Mutex</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+      </div>
+      
+        <div class="prev-or-next">
+          <div class="post-foot-next">
+            
+              <a href="/2021/03/12/nsq%E6%BA%90%E7%A0%81-%E6%B6%88%E6%81%AF%E6%8E%A5%E6%94%B6%E5%92%8C%E5%8F%91%E9%80%81%E5%AE%8C%E6%95%B4%E6%B5%81%E7%A8%8B/" target="_self">
+                <i class="iconfont icon-chevronleft"></i>
+                <span>上一页</span>
+              </a>
+            
+          </div>
+          <div class="post-attach">
+            <span class="post-pubtime">
+              <i class="iconfont icon-updatetime mr-10" title="更新时间"></i>
+              2023-05-03 01:06:38
+            </span>
+            
+                  <span class="post-categories">
+                    <i class="iconfont icon-bookmark" title="分类"></i>
+                    
+                    <span class="span--category">
+                      <a href="/categories/Golang/" title="Golang">
+                        <b>#</b> Golang
+                      </a>
+                    </span>
+                    
+                  </span>
+              
+                  <span class="post-tags">
+                    <i class="iconfont icon-tags mr-10" title="标签"></i>
+                    
+                    <span class="span--tag mr-8">
+                      <a href="/tags/Golang/" title="Golang">
+                        #Golang
+                      </a>
+                    </span>
+                    
+                    <span class="span--tag mr-8">
+                      <a href="/tags/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/" title="源码阅读">
+                        #源码阅读
+                      </a>
+                    </span>
+                    
+                    <span class="span--tag mr-8">
+                      <a href="/tags/Nsq/" title="Nsq">
+                        #Nsq
+                      </a>
+                    </span>
+                    
+                  </span>
+              
+          </div>
+          <div class="post-foot-prev">
+            
+              <a href="/2021/04/02/Go-sync-Map-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/" target="_self">
+                <span>下一页</span>
+                <i class="iconfont icon-chevronright"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+    </div>
+    
+  <div id="btn-catalog" class="btn-catalog">
+    <i class="iconfont icon-catalog"></i>
   </div>
-  
-    <div class="post-list">
-      <div class="post-item" title="一个轻量级的事件发布/订阅框架，它可以简化 Go 协程之间的通信">
-        <span class="time-m-d">2023-05-02</span>
-        <a href="/2023/05/02/%E4%B8%80%E4%B8%AA%E8%BD%BB%E9%87%8F%E7%BA%A7%E7%9A%84%E4%BA%8B%E4%BB%B6%E5%8F%91%E5%B8%83-%E8%AE%A2%E9%98%85%E6%A1%86%E6%9E%B6%EF%BC%8C%E5%AE%83%E5%8F%AF%E4%BB%A5%E7%AE%80%E5%8C%96-Go-%E5%8D%8F%E7%A8%8B%E4%B9%8B%E9%97%B4%E7%9A%84%E9%80%9A%E4%BF%A1/">
-          <span>一个轻量级的事件发布/订阅框架，它可以简化 Go 协程之间的通信</span>
-        </a>
-      </div>
+  <div class="post-catalog hidden" id="catalog">
+    <div class="title">目录</div>
+    <div class="catalog-content">
+      
+        <ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#nsq%E6%BA%90%E7%A0%81-nsqd%E6%80%BB%E4%BD%93%E6%B5%81%E7%A8%8B"><span class="toc-text">nsq源码-nsqd总体流程</span></a></li></ol>
+      
     </div>
+  </div>
+
   
-    <div class="post-list">
-      <div class="post-item" title="关于Copy-on-write的理解">
-        <span class="time-m-d">2022-05-30</span>
-        <a href="/2022/05/30/%E5%85%B3%E4%BA%8ECopy-on-write%E7%9A%84%E7%90%86%E8%A7%A3/">
-          <span>关于Copy-on-write的理解</span>
-        </a>
-      </div>
-    </div>
-  
-    <div class="post-list">
-      <div class="post-item" title="Go sync.Map源码解读">
-        <span class="time-m-d">2021-04-02</span>
-        <a href="/2021/04/02/Go-sync-Map-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/">
-          <span>Go sync.Map源码解读</span>
-        </a>
-      </div>
-    </div>
-  
-    <div class="post-list">
-      <div class="post-item" title="nsq源码-nsqd总体流程">
-        <span class="time-m-d">2021-03-12</span>
-        <a href="/2021/03/12/nsq%E6%BA%90%E7%A0%81-nsqd%E6%80%BB%E4%BD%93%E6%B5%81%E7%A8%8B/">
-          <span>nsq源码-nsqd总体流程</span>
-        </a>
-      </div>
-    </div>
-  
-    <div class="post-list">
-      <div class="post-item" title="nsq源码-消息接收和发送完整流程">
-        <span class="time-m-d">2021-03-12</span>
-        <a href="/2021/03/12/nsq%E6%BA%90%E7%A0%81-%E6%B6%88%E6%81%AF%E6%8E%A5%E6%94%B6%E5%92%8C%E5%8F%91%E9%80%81%E5%AE%8C%E6%95%B4%E6%B5%81%E7%A8%8B/">
-          <span>nsq源码-消息接收和发送完整流程</span>
-        </a>
-      </div>
-    </div>
-  
-    <div class="post-list">
-      <div class="post-item" title="nsq源码-diskqueue">
-        <span class="time-m-d">2021-03-12</span>
-        <a href="/2021/03/12/nsq%E6%BA%90%E7%A0%81-channel/">
-          <span>nsq源码-diskqueue</span>
-        </a>
-      </div>
-    </div>
-  
-    <div class="post-list">
-      <div class="post-item" title="nsq源码-topic">
-        <span class="time-m-d">2021-03-11</span>
-        <a href="/2021/03/11/nsq%E6%BA%90%E7%A0%81-topic/">
-          <span>nsq源码-topic</span>
-        </a>
-      </div>
-    </div>
-  
-    <div class="post-list">
-      <div class="post-item" title="nsq源码-diskqueue">
-        <span class="time-m-d">2021-03-11</span>
-        <a href="/2021/03/11/nsq%E6%BA%90%E7%A0%81-diskqueue/">
-          <span>nsq源码-diskqueue</span>
-        </a>
-      </div>
-    </div>
-  
-  <nav class="post-navigation">
+<script src="/js/catalog.js"></script>
+
+
+
+
     
-    <span class="page-num">1 / 1</span>
+      <div class="comments-container">
+        
+
+
+
+
+
+
+
+      </div>
     
-  </nav>
-</div>
+  </div>
+
 
         
 <div class="footer">
@@ -447,6 +564,24 @@
 
 
         
+  
+    <div class="share-icon tools-bar-item">
+      <a href="javascript: void(0)" id="share-icon">
+        <i class="iconfont iconshare"></i>
+      </a>
+      <div class="share-content hidden">
+        
+          <a class="share-item" href="https://twitter.com/intent/tweet?text=' + nsq%E6%BA%90%E7%A0%81-nsqd%E6%80%BB%E4%BD%93%E6%B5%81%E7%A8%8B + '&url=' + http%3A%2F%2Fexample.com%2F2021%2F03%2F12%2Fnsq%25E6%25BA%2590%25E7%25A0%2581-nsqd%25E6%2580%25BB%25E4%25BD%2593%25E6%25B5%2581%25E7%25A8%258B%2F + '" target="_blank" title="Twitter">
+            <i class="iconfont icon-twitter"></i>
+          </a>
+        
+        
+          <a class="share-item" href="https://www.facebook.com/sharer.php?u=http://example.com/2021/03/12/nsq%E6%BA%90%E7%A0%81-nsqd%E6%80%BB%E4%BD%93%E6%B5%81%E7%A8%8B/" target="_blank" title="Facebook">
+            <i class="iconfont icon-facebooksquare"></i>
+          </a>
+        
+      </div>
+    </div>
   
   
 <script src="/js/shares.js"></script>

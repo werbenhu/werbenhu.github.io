@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN" color-mode="light">
+
+  <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  
+  <meta name="author" content="werbenhu" />
+  <meta name="description" content="" />
+  
+  
+  <title>
+    
+      nsq源码-diskqueue 
+      
+      
+      |
+    
+     werbenhu
+  </title>
+
+  
+    <link rel="apple-touch-icon" href="/images/werben.png">
+    <link rel="icon" href="/images/werben.png">
+  
+
+  <!-- Raleway-Font -->
+  <link href="https://fonts.googleapis.com/css?family=Raleway&display=swap" rel="stylesheet">
+
+  <!-- hexo site css -->
+  <link rel="stylesheet" href="/css/main.css" />
+  <link rel="stylesheet" href="//at.alicdn.com/t/font_1886449_67xjft27j1l.css" />
+  <!-- 代码块风格 -->
+  
+
+  <!-- jquery3.3.1 -->
+  
+    <script defer type="text/javascript" src="/plugins/jquery.min.js"></script>
+  
+
+  <!-- fancybox -->
+  
+    <link href="/plugins/jquery.fancybox.min.css" rel="stylesheet">
+    <script defer type="text/javascript" src="/plugins/jquery.fancybox.min.js"></script>
+  
+  
+<script src="/js/fancybox.js"></script>
+
+
+  
+
+  
+
+  <script>
+    var html = document.documentElement
+    const colorMode = localStorage.getItem('color-mode')
+    if (colorMode) {
+      document.documentElement.setAttribute('color-mode', colorMode)
+    }
+  </script>
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+
+  <body>
+    <div id="app">
+      <div class="header">
+  <div class="avatar">
+    <a href="/">
+      <!-- 头像取消懒加载，添加no-lazy -->
+      
+        <img src="/images/werben.jpg" alt="">
+      
+    </a>
+    <div class="nickname"><a href="/">werbenhu</a></div>
+  </div>
+  <div class="navbar">
+    <ul>
+      
+        <li class="nav-item" data-path="/">
+          <a href="/">首页</a>
+        </li>
+      
+        <li class="nav-item" data-path="/archives/">
+          <a href="/archives/">归档</a>
+        </li>
+      
+        <li class="nav-item" data-path="/categories/">
+          <a href="/categories/">分类</a>
+        </li>
+      
+        <li class="nav-item" data-path="/tags/">
+          <a href="/tags/">标签</a>
+        </li>
+      
+        <li class="nav-item" data-path="/about/">
+          <a href="/about/">关于</a>
+        </li>
+      
+    </ul>
+  </div>
+</div>
+
+
+<script src="/js/activeNav.js"></script>
+
+
+
+      <div class="flex-container">
+        <!-- 文章详情页，展示文章具体内容，url形式：https://yoursite/文章标题/ -->
+<!-- 同时为「标签tag」，「朋友friend」，「分类categories」，「关于about」页面的承载页面，具体展示取决于page.type -->
+
+
+  <!-- LaTex Display -->
+
+  
+    <script async type="text/javascript" src="/plugins/mathjax/tex-chtml.js"></script>
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']]
+      }
+    }
+  </script>
+
+
+
+
+
+  <!-- clipboard -->
+
+  
+    <script async type="text/javascript" src="/plugins/clipboard.min.js"></script>
+  
+  
+<script src="/js/codeCopy.js"></script>
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  <!-- 文章内容页 url形式：https://yoursite/文章标题/ -->
+  <div class="container post-details" id="post-details">
+    <div class="post-content">
+      <div class="post-title">nsq源码-diskqueue</div>
+      <div class="post-attach">
+        <span class="post-pubtime">
+          <i class="iconfont icon-updatetime mr-10" title="更新时间"></i>
+          2023-05-03 01:00:35
+        </span>
+        
+              <span class="post-categories">
+                <i class="iconfont icon-bookmark" title="分类"></i>
+                
+                <span class="span--category">
+                  <a href="/categories/Golang/" title="Golang">
+                    <b>#</b> Golang
+                  </a>
+                </span>
+                
+              </span>
+          
+              <span class="post-tags">
+                <i class="iconfont icon-tags mr-10" title="标签"></i>
+                
+                <span class="span--tag mr-8">
+                  <a href="/tags/Golang/" title="Golang">
+                    #Golang
+                  </a>
+                </span>
+                
+                <span class="span--tag mr-8">
+                  <a href="/tags/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/" title="源码阅读">
+                    #源码阅读
+                  </a>
+                </span>
+                
+                <span class="span--tag mr-8">
+                  <a href="/tags/Nsq/" title="Nsq">
+                    #Nsq
+                  </a>
+                </span>
+                
+              </span>
+          
+      </div>
+      <div class="markdown-body">
+        <h1 id="nsq源码-diskqueue"><a href="#nsq源码-diskqueue" class="headerlink" title="nsq源码-diskqueue"></a>nsq源码-diskqueue</h1><p>channel有下面几个重要的成员，其实跟topic还有点像，都有一个memoryMsgChan和diskqueue</p>
+<ol>
+<li><p><strong>memoryMsgChan</strong>： 这是存放消息的内存，就是一个通道，通道的大小MemQueueSize，<br>默认配置是10000，也就是如果堆积的消息超过10000就会使用磁盘了</p>
+</li>
+<li><p><strong>backend</strong> ：就是diskqueue，这个就是磁盘存储消息的地方了，关于这个diskqueue，请参考：<a target="_blank" rel="noopener" href="https://www.cnblogs.com/werben/p/14517781.html">https://www.cnblogs.com/werben/p/14517781.html</a></p>
+</li>
+<li><p><strong>clients</strong> ： Consumer 这里关联的是客户端的订阅者</p>
+</li>
+<li><p><strong>deferredMessages和deferredPQ</strong> ： 延迟消息存放的地方，其中deferredPQ，是一个优先级管理的队列，直接丢在内存</p>
+</li>
+<li><p><strong>inFlightMessages和inFlightPQ</strong>: 这个标识正在执行中的消息，也是直接丢在内存</p>
+</li>
+</ol>
+<p>topic在messagePump()中处理消息的时候，通过下面两个函数，将消息投递到channel。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">//延时消息</span><br><span class="line">channel.PutMessageDeferred(chanMsg, chanMsg.deferred)</span><br><span class="line">//非延时消息</span><br><span class="line">channel.PutMessage(chanMsg)</span><br></pre></td></tr></table></figure>
+<p>在这里我们看不到Channel的“守护”协程，也就是我们只看到topic将msg投递到channel，channel将延时消息丢到队列中，但是找不到channel从队列中取出数据发送给client consumer的地方</p>
+<p>找到channel的两个函数, 看了下就是这两个函数将msg发送给client consumer的</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">func (c *Channel) processDeferredQueue(t int64) bool</span><br><span class="line">func (c *Channel) processInFlightQueue(t int64) bool</span><br></pre></td></tr></table></figure>
+
+<p>但是channel本身没有“守护”协程，一直运行来调用这两个函数，找这两个函数调用的地方，一直往上找调用者。最终找到“守护”协程在哪里了。</p>
+<p>原来在nsqd里面运行了一个queueScanLoop的“守护”协程。</p>
+<h2 id="一、nsqd-queueScanLoop"><a href="#一、nsqd-queueScanLoop" class="headerlink" title="一、nsqd.queueScanLoop"></a>一、nsqd.queueScanLoop</h2><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br></pre></td><td class="code"><pre><span class="line">//nsqd.go</span><br><span class="line"></span><br><span class="line">func (n *NSQD) queueScanLoop() &#123;</span><br><span class="line">	workCh := make(chan *Channel, n.getOpts().QueueScanSelectionCount)</span><br><span class="line">	responseCh := make(chan bool, n.getOpts().QueueScanSelectionCount)</span><br><span class="line">	closeCh := make(chan int)</span><br><span class="line"></span><br><span class="line">	//定时执行loop的间隔时间，默认100ms</span><br><span class="line">	workTicker := time.NewTicker(n.getOpts().QueueScanInterval)</span><br><span class="line">	//刷新channel数量，重新调整协程池，默认时间是5s刷新一次</span><br><span class="line">	refreshTicker := time.NewTicker(n.getOpts().QueueScanRefreshInterval)</span><br><span class="line"></span><br><span class="line">	channels := n.channels()</span><br><span class="line">	n.resizePool(len(channels), workCh, responseCh, closeCh)</span><br><span class="line"></span><br><span class="line">	for &#123;</span><br><span class="line">		select &#123;</span><br><span class="line">		case &lt;-workTicker.C:</span><br><span class="line">			if len(channels) == 0 &#123;</span><br><span class="line">				continue</span><br><span class="line">			&#125;</span><br><span class="line">		case &lt;-refreshTicker.C:</span><br><span class="line">			channels = n.channels()</span><br><span class="line">			n.resizePool(len(channels), workCh, responseCh, closeCh)</span><br><span class="line">			continue</span><br><span class="line">		case &lt;-n.exitChan:</span><br><span class="line">			goto exit</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		num := n.getOpts().QueueScanSelectionCount</span><br><span class="line">		if num &gt; len(channels) &#123;</span><br><span class="line">			num = len(channels)</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">	loop:</span><br><span class="line">		//从 channels 中随机选择 num 个 channel</span><br><span class="line">		for _, i := range util.UniqRands(num, len(channels)) &#123;</span><br><span class="line">			workCh &lt;- channels[i]</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		//等待处理响应，记录失败次数</span><br><span class="line">		numDirty := 0</span><br><span class="line">		for i := 0; i &lt; num; i++ &#123;</span><br><span class="line">			if &lt;-responseCh &#123;</span><br><span class="line">				numDirty++</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		//queueScanLoop的处理方法模仿了Redis的概率到期算法</span><br><span class="line">		//(probabilistic expiration algorithm)，</span><br><span class="line">		//每过一个QueueScanInterval(默认100ms)间隔，进行一次概率选择，</span><br><span class="line">		//从所有的channel缓存中随机选择QueueScanSelectionCount(默认20)个channel，</span><br><span class="line">		//如果某个被选中channel存在InFlighting消息或者Deferred消息，</span><br><span class="line">		//则认为该channel为“脏”channel。</span><br><span class="line">		//如果被选中channel中“脏”channel的比例大于QueueScanDirtyPercent(默认25%)，</span><br><span class="line">		//则不投入睡眠，直接进行下一次概率选择</span><br><span class="line">		if float64(numDirty)/float64(num) &gt; n.getOpts().QueueScanDirtyPercent &#123;</span><br><span class="line">			goto loop</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">exit:</span><br><span class="line">	n.logf(LOG_INFO, &quot;QUEUESCAN: closing&quot;)</span><br><span class="line">	close(closeCh)</span><br><span class="line">	workTicker.Stop()</span><br><span class="line">	refreshTicker.Stop()</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">//协程池调整</span><br><span class="line">func (n *NSQD) resizePool(num int, workCh chan *Channel, responseCh chan bool, closeCh chan int) &#123;</span><br><span class="line"></span><br><span class="line">	// 协程池大小 = 总channel数 / 4</span><br><span class="line">	idealPoolSize := int(float64(num) * 0.25)</span><br><span class="line">	if idealPoolSize &lt; 1 &#123;</span><br><span class="line">		idealPoolSize = 1</span><br><span class="line">	&#125; else if idealPoolSize &gt; n.getOpts().QueueScanWorkerPoolMax &#123;</span><br><span class="line">		//idealPoolSize 协程池大小，最大默认是4个</span><br><span class="line">		idealPoolSize = n.getOpts().QueueScanWorkerPoolMax</span><br><span class="line">	&#125;</span><br><span class="line">	for &#123;</span><br><span class="line">		if idealPoolSize == n.poolSize &#123;</span><br><span class="line">			break</span><br><span class="line">		&#125; else if idealPoolSize &lt; n.poolSize &#123;</span><br><span class="line">			// contract</span><br><span class="line">			// 协程池协程容量 &lt; 当前已经开启的协程数量</span><br><span class="line">			// 说明开启的协程过多，需要关闭协程</span><br><span class="line">			// closeCh queueScanWorker会中断“守护”协程</span><br><span class="line">			// 关闭后，将当前开启的协程数量-1</span><br><span class="line">			closeCh &lt;- 1</span><br><span class="line">			n.poolSize--</span><br><span class="line">		&#125; else &#123;</span><br><span class="line">			// expand</span><br><span class="line">			// 协程池协程容量 &gt; 当前已经开启的协程数量</span><br><span class="line">			// 开启新的协程</span><br><span class="line">			n.waitGroup.Wrap(func() &#123;</span><br><span class="line">				n.queueScanWorker(workCh, responseCh, closeCh)</span><br><span class="line">			&#125;)</span><br><span class="line">			n.poolSize++</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">// 真正调用channel.processInFlightQueue的地方</span><br><span class="line">func (n *NSQD) queueScanWorker(workCh chan *Channel, responseCh chan bool, closeCh chan int) &#123;</span><br><span class="line">	for &#123;</span><br><span class="line">		select &#123;</span><br><span class="line">		case c := &lt;-workCh:</span><br><span class="line">			//处理一次某个channel的消息</span><br><span class="line">			now := time.Now().UnixNano()</span><br><span class="line">			dirty := false</span><br><span class="line">			if c.processInFlightQueue(now) &#123;</span><br><span class="line">				dirty = true</span><br><span class="line">			&#125;</span><br><span class="line">			if c.processDeferredQueue(now) &#123;</span><br><span class="line">				dirty = true</span><br><span class="line">			&#125;</span><br><span class="line">			//如果这个channel有消息，则设置为dirty=true</span><br><span class="line">			responseCh &lt;- dirty</span><br><span class="line">		case &lt;-closeCh:</span><br><span class="line">			return</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="二、channel-processInFlightQueue"><a href="#二、channel-processInFlightQueue" class="headerlink" title="二、channel.processInFlightQueue"></a>二、channel.processInFlightQueue</h2><p>现在搞清楚了processInFlightQueue调用的地方，那这个processInFlightQueue到底做了什么</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br></pre></td><td class="code"><pre><span class="line">func (c *Channel) processInFlightQueue(t int64) bool &#123;</span><br><span class="line">	c.exitMutex.RLock()</span><br><span class="line">	defer c.exitMutex.RUnlock()</span><br><span class="line"></span><br><span class="line">	if c.Exiting() &#123;</span><br><span class="line">		return false</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	dirty := false</span><br><span class="line">	for &#123;</span><br><span class="line">		c.inFlightMutex.Lock()</span><br><span class="line">		msg, _ := c.inFlightPQ.PeekAndShift(t)</span><br><span class="line">		c.inFlightMutex.Unlock()</span><br><span class="line"></span><br><span class="line">		if msg == nil &#123;</span><br><span class="line">			goto exit</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		//只要有消息就标识这个通道是脏的</span><br><span class="line">		dirty = true</span><br><span class="line"></span><br><span class="line">		_, err := c.popInFlightMessage(msg.clientID, msg.ID)</span><br><span class="line">		if err != nil &#123;</span><br><span class="line">			goto exit</span><br><span class="line">		&#125;</span><br><span class="line">		atomic.AddUint64(&amp;c.timeoutCount, 1)</span><br><span class="line">		c.RLock()</span><br><span class="line">		client, ok := c.clients[msg.clientID]</span><br><span class="line">		c.RUnlock()</span><br><span class="line">		if ok &#123;</span><br><span class="line">			client.TimedOutMessage()</span><br><span class="line">		&#125;</span><br><span class="line">		//循环将channel中存在inFlightPQ中消息put出去</span><br><span class="line">		//put到memoryMsgChan或者磁盘</span><br><span class="line">		c.put(msg)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">exit:</span><br><span class="line">	return dirty</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">func (c *Channel) put(m *Message) error &#123;</span><br><span class="line">	select &#123;</span><br><span class="line">	//将消息写入到memoryMsgChan中去</span><br><span class="line">	case c.memoryMsgChan &lt;- m:</span><br><span class="line">	//如果memoryMsgChan满了则将消息写到磁盘中区</span><br><span class="line">	default:</span><br><span class="line">		err := writeMessageToBackend(m, c.backend)</span><br><span class="line">		c.nsqd.SetHealth(err)</span><br><span class="line">		if err != nil &#123;</span><br><span class="line">			c.nsqd.logf(LOG_ERROR, &quot;CHANNEL(%s): failed to write message to backend - %s&quot;,</span><br><span class="line">				c.name, err)</span><br><span class="line">			return err</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">	return nil</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="三、channel-processDeferredQueue"><a href="#三、channel-processDeferredQueue" class="headerlink" title="三、channel.processDeferredQueue"></a>三、channel.processDeferredQueue</h2><p>接下来看看延时消息是怎么处理的<br>延时消息看起来跟非延时消息没什么区别<br>其实是有区别的，区别就在c.deferredPQ.PeekAndShift(t)这里</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br></pre></td><td class="code"><pre><span class="line">func (c *Channel) processDeferredQueue(t int64) bool &#123;</span><br><span class="line">	c.exitMutex.RLock()</span><br><span class="line">	defer c.exitMutex.RUnlock()</span><br><span class="line"></span><br><span class="line">	if c.Exiting() &#123;</span><br><span class="line">		return false</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	dirty := false</span><br><span class="line">	for &#123;</span><br><span class="line">		c.deferredMutex.Lock()</span><br><span class="line">		//区别在这个PeekAndShift里面</span><br><span class="line">		item, _ := c.deferredPQ.PeekAndShift(t)</span><br><span class="line">		c.deferredMutex.Unlock()</span><br><span class="line"></span><br><span class="line">		if item == nil &#123;</span><br><span class="line">			goto exit</span><br><span class="line">		&#125;</span><br><span class="line">		dirty = true</span><br><span class="line"></span><br><span class="line">		msg := item.Value.(*Message)</span><br><span class="line">		_, err := c.popDeferredMessage(msg.ID)</span><br><span class="line">		if err != nil &#123;</span><br><span class="line">			goto exit</span><br><span class="line">		&#125;</span><br><span class="line">		//put到memoryMsgChan或者磁盘</span><br><span class="line">		c.put(msg)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">exit:</span><br><span class="line">	return dirty</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">//pqueue.go </span><br><span class="line">//max实参传入的是当前时间</span><br><span class="line">func (pq *PriorityQueue) PeekAndShift(max int64) (*Item, int64) &#123;</span><br><span class="line">	if pq.Len() == 0 &#123;</span><br><span class="line">		return nil, 0</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	item := (*pq)[0]</span><br><span class="line">	//存入延时消息时，Priority优先级就是消息的到期时间</span><br><span class="line">	//这里只有当前时间大于了消息的到期时间才回返回</span><br><span class="line">	if item.Priority &gt; max &#123;</span><br><span class="line">		return nil, item.Priority - max</span><br><span class="line">	&#125;</span><br><span class="line">	heap.Remove(pq, 0)</span><br><span class="line"></span><br><span class="line">	return item, 0</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+      </div>
+      
+        <div class="prev-or-next">
+          <div class="post-foot-next">
+            
+              <a href="/2021/03/11/nsq%E6%BA%90%E7%A0%81-topic/" target="_self">
+                <i class="iconfont icon-chevronleft"></i>
+                <span>上一页</span>
+              </a>
+            
+          </div>
+          <div class="post-attach">
+            <span class="post-pubtime">
+              <i class="iconfont icon-updatetime mr-10" title="更新时间"></i>
+              2023-05-03 01:00:35
+            </span>
+            
+                  <span class="post-categories">
+                    <i class="iconfont icon-bookmark" title="分类"></i>
+                    
+                    <span class="span--category">
+                      <a href="/categories/Golang/" title="Golang">
+                        <b>#</b> Golang
+                      </a>
+                    </span>
+                    
+                  </span>
+              
+                  <span class="post-tags">
+                    <i class="iconfont icon-tags mr-10" title="标签"></i>
+                    
+                    <span class="span--tag mr-8">
+                      <a href="/tags/Golang/" title="Golang">
+                        #Golang
+                      </a>
+                    </span>
+                    
+                    <span class="span--tag mr-8">
+                      <a href="/tags/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/" title="源码阅读">
+                        #源码阅读
+                      </a>
+                    </span>
+                    
+                    <span class="span--tag mr-8">
+                      <a href="/tags/Nsq/" title="Nsq">
+                        #Nsq
+                      </a>
+                    </span>
+                    
+                  </span>
+              
+          </div>
+          <div class="post-foot-prev">
+            
+              <a href="/2021/03/12/nsq%E6%BA%90%E7%A0%81-%E6%B6%88%E6%81%AF%E6%8E%A5%E6%94%B6%E5%92%8C%E5%8F%91%E9%80%81%E5%AE%8C%E6%95%B4%E6%B5%81%E7%A8%8B/" target="_self">
+                <span>下一页</span>
+                <i class="iconfont icon-chevronright"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+    </div>
+    
+  <div id="btn-catalog" class="btn-catalog">
+    <i class="iconfont icon-catalog"></i>
+  </div>
+  <div class="post-catalog hidden" id="catalog">
+    <div class="title">目录</div>
+    <div class="catalog-content">
+      
+        <ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#nsq%E6%BA%90%E7%A0%81-diskqueue"><span class="toc-text">nsq源码-diskqueue</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E3%80%81nsqd-queueScanLoop"><span class="toc-text">一、nsqd.queueScanLoop</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%8C%E3%80%81channel-processInFlightQueue"><span class="toc-text">二、channel.processInFlightQueue</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%89%E3%80%81channel-processDeferredQueue"><span class="toc-text">三、channel.processDeferredQueue</span></a></li></ol></li></ol>
+      
+    </div>
+  </div>
+
+  
+<script src="/js/catalog.js"></script>
+
+
+
+
+    
+      <div class="comments-container">
+        
+
+
+
+
+
+
+
+      </div>
+    
+  </div>
+
+
+        
+<div class="footer">
+  <div class="social">
+    <ul>
+      
+        <li>
+          <a title="github" target="_blank" rel="noopener" href="https://github.com/werbenhu">
+            <i class="iconfont icon-github"></i>
+          </a>
+        </li>
+      
+    </ul>
+  </div>
+  
+    
+    <div class="footer-more">
+      
+        <a target="_blank" rel="noopener" href="https://github.com/werbenhu">Copyright © 2023 werbenhu</a>
+        
+    </div>
+  
+    
+    <div class="footer-more">
+      
+        <a target="_blank" rel="noopener" href="https://github.com/zchengsite/hexo-theme-oranges">Theme by Oranges | Powered by Hexo</a>
+        
+    </div>
+  
+  
+</div>
+
+      </div>
+
+      <div class="tools-bar">
+        <div class="back-to-top tools-bar-item hidden">
+  <a href="javascript: void(0)">
+    <i class="iconfont icon-chevronup"></i>
+  </a>
+</div>
+
+
+<script src="/js/backtotop.js"></script>
+
+
+
+        
+  <div class="search-icon tools-bar-item" id="search-icon">
+    <a href="javascript: void(0)">
+      <i class="iconfont icon-search"></i>
+    </a>
+  </div>
+
+  <div class="search-overlay hidden">
+    <div class="search-content" tabindex="0">
+      <div class="search-title">
+        <span class="search-icon-input">
+          <a href="javascript: void(0)">
+            <i class="iconfont icon-search"></i>
+          </a>
+        </span>
+        
+          <input type="text" class="search-input" id="search-input" placeholder="搜索...">
+        
+        <span class="search-close-icon" id="search-close-icon">
+          <a href="javascript: void(0)">
+            <i class="iconfont icon-close"></i>
+          </a>
+        </span>
+      </div>
+      <div class="search-result" id="search-result"></div>
+    </div>
+  </div>
+
+  <script type="text/javascript">
+    var inputArea = document.querySelector("#search-input")
+    var searchOverlayArea = document.querySelector(".search-overlay")
+
+    inputArea.onclick = function() {
+      getSearchFile()
+      this.onclick = null
+    }
+
+    inputArea.onkeydown = function() {
+      if(event.keyCode == 13)
+        return false
+    }
+
+    function openOrHideSearchContent() {
+      let isHidden = searchOverlayArea.classList.contains('hidden')
+      if (isHidden) {
+        searchOverlayArea.classList.remove('hidden')
+        document.body.classList.add('hidden')
+        // inputArea.focus()
+      } else {
+        searchOverlayArea.classList.add('hidden')
+        document.body.classList.remove('hidden')
+      }
+    }
+
+    function blurSearchContent(e) {
+      if (e.target === searchOverlayArea) {
+        openOrHideSearchContent()
+      }
+    }
+
+    document.querySelector("#search-icon").addEventListener("click", openOrHideSearchContent, false)
+    document.querySelector("#search-close-icon").addEventListener("click", openOrHideSearchContent, false)
+    searchOverlayArea.addEventListener("click", blurSearchContent, false)
+
+    var searchFunc = function (path, search_id, content_id) {
+      'use strict';
+      var $input = document.getElementById(search_id);
+      var $resultContent = document.getElementById(content_id);
+      $resultContent.innerHTML = "<ul><span class='local-search-empty'>首次搜索，正在载入索引文件，请稍后……<span></ul>";
+      $.ajax({
+        // 0x01. load xml file
+        url: path,
+        dataType: "xml",
+        success: function (xmlResponse) {
+          // 0x02. parse xml file
+          var datas = $("entry", xmlResponse).map(function () {
+            return {
+              title: $("title", this).text(),
+              content: $("content", this).text(),
+              url: $("url", this).text()
+            };
+          }).get();
+          $resultContent.innerHTML = "";
+
+          $input.addEventListener('input', function () {
+            // 0x03. parse query to keywords list
+            var str = '<ul class=\"search-result-list\">';
+            var keywords = this.value.trim().toLowerCase().split(/[\s\-]+/);
+            $resultContent.innerHTML = "";
+            if (this.value.trim().length <= 0) {
+              return;
+            }
+            // 0x04. perform local searching
+            datas.forEach(function (data) {
+              var isMatch = true;
+              var content_index = [];
+              if (!data.title || data.title.trim() === '') {
+                data.title = "Untitled";
+              }
+              var orig_data_title = data.title.trim();
+              var data_title = orig_data_title.toLowerCase();
+              var orig_data_content = data.content.trim().replace(/<[^>]+>/g, "");
+              var data_content = orig_data_content.toLowerCase();
+              var data_url = data.url;
+              var index_title = -1;
+              var index_content = -1;
+              var first_occur = -1;
+              // only match artiles with not empty contents
+              if (data_content !== '') {
+                keywords.forEach(function (keyword, i) {
+                  index_title = data_title.indexOf(keyword);
+                  index_content = data_content.indexOf(keyword);
+
+                  if (index_title < 0 && index_content < 0) {
+                    isMatch = false;
+                  } else {
+                    if (index_content < 0) {
+                      index_content = 0;
+                    }
+                    if (i == 0) {
+                      first_occur = index_content;
+                    }
+                    // content_index.push({index_content:index_content, keyword_len:keyword_len});
+                  }
+                });
+              } else {
+                isMatch = false;
+              }
+              // 0x05. show search results
+              if (isMatch) {
+                str += "<li><a href='" + data_url + "' class='search-result-title'>" + orig_data_title + "</a>";
+                var content = orig_data_content;
+                if (first_occur >= 0) {
+                  // cut out 100 characters
+                  var start = first_occur - 20;
+                  var end = first_occur + 80;
+
+                  if (start < 0) {
+                    start = 0;
+                  }
+
+                  if (start == 0) {
+                    end = 100;
+                  }
+
+                  if (end > content.length) {
+                    end = content.length;
+                  }
+
+                  var match_content = content.substr(start, end);
+
+                  // highlight all keywords
+                  keywords.forEach(function (keyword) {
+                    var regS = new RegExp(keyword, "gi");
+                    match_content = match_content.replace(regS, "<span class=\"search-keyword\">" + keyword + "</span>");
+                  });
+
+                  str += "<p class=\"search-result-abstract\">" + match_content + "...</p>"
+                }
+                str += "</li>";
+              }
+            });
+            str += "</ul>";
+            if (str.indexOf('<li>') === -1) {
+              return $resultContent.innerHTML = "<ul><span class='local-search-empty'>没有找到内容，请尝试更换检索词。<span></ul>";
+            }
+            $resultContent.innerHTML = str;
+          });
+        },
+        error: function(xhr, status, error) {
+          $resultContent.innerHTML = ""
+          if (xhr.status === 404) {
+            $resultContent.innerHTML = "<ul><span class='local-search-empty'>未找到search.xml文件，具体请参考：<a href='https://github.com/zchengsite/hexo-theme-oranges#configuration' target='_black'>configuration</a><span></ul>";
+          } else {
+            $resultContent.innerHTML = "<ul><span class='local-search-empty'>请求失败，尝试重新刷新页面或稍后重试。<span></ul>";
+          }
+        }
+      });
+      $(document).on('click', '#search-close-icon', function() {
+        $('#search-input').val('');
+        $('#search-result').html('');
+      });
+    }
+
+    var getSearchFile = function() {
+        var path = "/search.xml";
+        searchFunc(path, 'search-input', 'search-result');
+    }
+  </script>
+
+
+
+
+        
+  <div class="tools-bar-item theme-icon" id="switch-color-scheme">
+    <a href="javascript: void(0)">
+      <i id="theme-icon" class="iconfont icon-moon"></i>
+    </a>
+  </div>
+
+  
+<script src="/js/colorscheme.js"></script>
+
+
+
+
+
+        
+  
+    <div class="share-icon tools-bar-item">
+      <a href="javascript: void(0)" id="share-icon">
+        <i class="iconfont iconshare"></i>
+      </a>
+      <div class="share-content hidden">
+        
+          <a class="share-item" href="https://twitter.com/intent/tweet?text=' + nsq%E6%BA%90%E7%A0%81-diskqueue + '&url=' + http%3A%2F%2Fexample.com%2F2021%2F03%2F12%2Fnsq%25E6%25BA%2590%25E7%25A0%2581-channel%2F + '" target="_blank" title="Twitter">
+            <i class="iconfont icon-twitter"></i>
+          </a>
+        
+        
+          <a class="share-item" href="https://www.facebook.com/sharer.php?u=http://example.com/2021/03/12/nsq%E6%BA%90%E7%A0%81-channel/" target="_blank" title="Facebook">
+            <i class="iconfont icon-facebooksquare"></i>
+          </a>
+        
+      </div>
+    </div>
+  
+  
+<script src="/js/shares.js"></script>
+
+
+
+      </div>
+    </div>
+  </body>
+</html>

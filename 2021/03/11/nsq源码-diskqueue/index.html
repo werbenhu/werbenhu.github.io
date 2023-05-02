@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN" color-mode="light">
+
+  <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  
+  <meta name="author" content="werbenhu" />
+  <meta name="description" content="" />
+  
+  
+  <title>
+    
+      nsq源码-diskqueue 
+      
+      
+      |
+    
+     werbenhu
+  </title>
+
+  
+    <link rel="apple-touch-icon" href="/images/werben.png">
+    <link rel="icon" href="/images/werben.png">
+  
+
+  <!-- Raleway-Font -->
+  <link href="https://fonts.googleapis.com/css?family=Raleway&display=swap" rel="stylesheet">
+
+  <!-- hexo site css -->
+  <link rel="stylesheet" href="/css/main.css" />
+  <link rel="stylesheet" href="//at.alicdn.com/t/font_1886449_67xjft27j1l.css" />
+  <!-- 代码块风格 -->
+  
+
+  <!-- jquery3.3.1 -->
+  
+    <script defer type="text/javascript" src="/plugins/jquery.min.js"></script>
+  
+
+  <!-- fancybox -->
+  
+    <link href="/plugins/jquery.fancybox.min.css" rel="stylesheet">
+    <script defer type="text/javascript" src="/plugins/jquery.fancybox.min.js"></script>
+  
+  
+<script src="/js/fancybox.js"></script>
+
+
+  
+
+  
+
+  <script>
+    var html = document.documentElement
+    const colorMode = localStorage.getItem('color-mode')
+    if (colorMode) {
+      document.documentElement.setAttribute('color-mode', colorMode)
+    }
+  </script>
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+
+  <body>
+    <div id="app">
+      <div class="header">
+  <div class="avatar">
+    <a href="/">
+      <!-- 头像取消懒加载，添加no-lazy -->
+      
+        <img src="/images/werben.jpg" alt="">
+      
+    </a>
+    <div class="nickname"><a href="/">werbenhu</a></div>
+  </div>
+  <div class="navbar">
+    <ul>
+      
+        <li class="nav-item" data-path="/">
+          <a href="/">首页</a>
+        </li>
+      
+        <li class="nav-item" data-path="/archives/">
+          <a href="/archives/">归档</a>
+        </li>
+      
+        <li class="nav-item" data-path="/categories/">
+          <a href="/categories/">分类</a>
+        </li>
+      
+        <li class="nav-item" data-path="/tags/">
+          <a href="/tags/">标签</a>
+        </li>
+      
+        <li class="nav-item" data-path="/about/">
+          <a href="/about/">关于</a>
+        </li>
+      
+    </ul>
+  </div>
+</div>
+
+
+<script src="/js/activeNav.js"></script>
+
+
+
+      <div class="flex-container">
+        <!-- 文章详情页，展示文章具体内容，url形式：https://yoursite/文章标题/ -->
+<!-- 同时为「标签tag」，「朋友friend」，「分类categories」，「关于about」页面的承载页面，具体展示取决于page.type -->
+
+
+  <!-- LaTex Display -->
+
+  
+    <script async type="text/javascript" src="/plugins/mathjax/tex-chtml.js"></script>
+  
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']]
+      }
+    }
+  </script>
+
+
+
+
+
+  <!-- clipboard -->
+
+  
+    <script async type="text/javascript" src="/plugins/clipboard.min.js"></script>
+  
+  
+<script src="/js/codeCopy.js"></script>
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  <!-- 文章内容页 url形式：https://yoursite/文章标题/ -->
+  <div class="container post-details" id="post-details">
+    <div class="post-content">
+      <div class="post-title">nsq源码-diskqueue</div>
+      <div class="post-attach">
+        <span class="post-pubtime">
+          <i class="iconfont icon-updatetime mr-10" title="更新时间"></i>
+          2023-05-03 00:59:23
+        </span>
+        
+              <span class="post-categories">
+                <i class="iconfont icon-bookmark" title="分类"></i>
+                
+                <span class="span--category">
+                  <a href="/categories/Golang/" title="Golang">
+                    <b>#</b> Golang
+                  </a>
+                </span>
+                
+              </span>
+          
+              <span class="post-tags">
+                <i class="iconfont icon-tags mr-10" title="标签"></i>
+                
+                <span class="span--tag mr-8">
+                  <a href="/tags/Golang/" title="Golang">
+                    #Golang
+                  </a>
+                </span>
+                
+                <span class="span--tag mr-8">
+                  <a href="/tags/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/" title="源码阅读">
+                    #源码阅读
+                  </a>
+                </span>
+                
+                <span class="span--tag mr-8">
+                  <a href="/tags/Nsq/" title="Nsq">
+                    #Nsq
+                  </a>
+                </span>
+                
+              </span>
+          
+      </div>
+      <div class="markdown-body">
+        <h1 id="nsq源码-diskqueue"><a href="#nsq源码-diskqueue" class="headerlink" title="nsq源码-diskqueue"></a>nsq源码-diskqueue</h1><p>有兴趣可以看看这篇文章<br><a target="_blank" rel="noopener" href="https://www.cnblogs.com/zhangboyu/p/7457070.html">https://www.cnblogs.com/zhangboyu/p/7457070.html</a></p>
+<h2 id="一、队列存储"><a href="#一、队列存储" class="headerlink" title="一、队列存储"></a>一、队列存储</h2><p>队列的特征是先入先出，也就是写入是从后面写入，读取是从前面读取<br>我们平时写的队列一般是放到内存里面，比如一个大的动态数组<br>这里如果队列中的数据很大，diskqueue则是将这个动态数组拆成了好多个文件来存储队列中的数据</p>
+<p>如果队列是放在内存数组中，那么队列只需要记录两个属性，一个头的位置，一个是尾的位置，<br>队列大小depth &#x3D; 头位置 - 尾位置</p>
+<p>但是由于diskqueue是将数组保存在多个文件中<br>所以diskqueue就会有五个属性： 头所在的文件，头在文件中的位置，尾所在的文件，尾在文件中的位置，还有就是depth标识头和尾中间的数据数量<br>这五个数据作为diskqueue的元数据单独保存在一个文件里面。<br>所以New一个diskqueue的时候先要这几个元数据读取出来</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br></pre></td><td class="code"><pre><span class="line">func New(name string, dataPath string, maxBytesPerFile int64,</span><br><span class="line">	minMsgSize int32, maxMsgSize int32,</span><br><span class="line">	syncEvery int64, syncTimeout time.Duration, logf AppLogFunc) Interface &#123;</span><br><span class="line">	d := diskQueue&#123;</span><br><span class="line">		//名称</span><br><span class="line">		name:              name,</span><br><span class="line">		//文件保存路径</span><br><span class="line">		dataPath:          dataPath,</span><br><span class="line">		//每个文件大小最大值，超过要重新开启一个文件</span><br><span class="line">		maxBytesPerFile:   maxBytesPerFile,</span><br><span class="line">		//写入消息最小大小</span><br><span class="line">		minMsgSize:        minMsgSize,</span><br><span class="line">		//写入消息最大大小</span><br><span class="line">		maxMsgSize:        maxMsgSize,</span><br><span class="line">		readChan:          make(chan []byte),</span><br><span class="line">		writeChan:         make(chan []byte),</span><br><span class="line">		writeResponseChan: make(chan error),</span><br><span class="line">		emptyChan:         make(chan int),</span><br><span class="line">		emptyResponseChan: make(chan error),</span><br><span class="line">		exitChan:          make(chan int),</span><br><span class="line">		exitSyncChan:      make(chan int),</span><br><span class="line">		syncEvery:         syncEvery,</span><br><span class="line">		syncTimeout:       syncTimeout,</span><br><span class="line">		logf:              logf,</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	// 读取队列数据</span><br><span class="line">	err := d.retrieveMetaData()</span><br><span class="line">	if err != nil &amp;&amp; !os.IsNotExist(err) &#123;</span><br><span class="line">		d.logf(ERROR, &quot;DISKQUEUE(%s) failed to retrieveMetaData - %s&quot;, d.name, err)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	go d.ioLoop()</span><br><span class="line">	return &amp;d</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">// 读取队列数据</span><br><span class="line">func (d *diskQueue) retrieveMetaData() error &#123;</span><br><span class="line">	var f *os.File</span><br><span class="line">	var err error</span><br><span class="line"></span><br><span class="line">	fileName := d.metaDataFileName()</span><br><span class="line">	f, err = os.OpenFile(fileName, os.O_RDONLY, 0600)</span><br><span class="line">	if err != nil &#123;</span><br><span class="line">		return err</span><br><span class="line">	&#125;</span><br><span class="line">	defer f.Close()</span><br><span class="line"></span><br><span class="line">	//队列写入和读取位置中间有多少条数据，也就是队列的大小</span><br><span class="line">	var depth int64</span><br><span class="line">	//读取队列核心数据</span><br><span class="line">	//当前读取文件是哪个，读取位置是哪里</span><br><span class="line">	//当前写入的文件是哪个，写入文件位置</span><br><span class="line">	_, err = fmt.Fscanf(f, &quot;%d\n%d,%d\n%d,%d\n&quot;,</span><br><span class="line">		&amp;depth,</span><br><span class="line">		&amp;d.readFileNum, &amp;d.readPos,</span><br><span class="line">		&amp;d.writeFileNum, &amp;d.writePos)</span><br><span class="line">	if err != nil &#123;</span><br><span class="line">		return err</span><br><span class="line">	&#125;</span><br><span class="line">	atomic.StoreInt64(&amp;d.depth, depth)</span><br><span class="line"></span><br><span class="line">	//下一个读取文件</span><br><span class="line">	d.nextReadFileNum = d.readFileNum</span><br><span class="line">	//下一个读取位置</span><br><span class="line">	d.nextReadPos = d.readPos</span><br><span class="line"></span><br><span class="line">	return nil</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="二、写入队列"><a href="#二、写入队列" class="headerlink" title="二、写入队列"></a>二、写入队列</h2><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br></pre></td><td class="code"><pre><span class="line">func (d *diskQueue) writeOne(data []byte) error &#123;</span><br><span class="line">	var err error</span><br><span class="line"></span><br><span class="line">	// 当前写入文件是否打开，没有则打开当前写入文件</span><br><span class="line">	if d.writeFile == nil &#123;</span><br><span class="line">		curFileName := d.fileName(d.writeFileNum)</span><br><span class="line">		d.writeFile, err = os.OpenFile(curFileName, os.O_RDWR|os.O_CREATE, 0600)</span><br><span class="line">		if err != nil &#123;</span><br><span class="line">			return err</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		d.logf(INFO, &quot;DISKQUEUE(%s): writeOne() opened %s&quot;, d.name, curFileName)</span><br><span class="line"></span><br><span class="line">		//如果当前写入位置大于0，则将文件位置移动到写入位置点</span><br><span class="line">		if d.writePos &gt; 0 &#123;</span><br><span class="line">			_, err = d.writeFile.Seek(d.writePos, 0)</span><br><span class="line">			if err != nil &#123;</span><br><span class="line">				d.writeFile.Close()</span><br><span class="line">				d.writeFile = nil</span><br><span class="line">				return err</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	dataLen := int32(len(data))</span><br><span class="line"></span><br><span class="line">	//判断消息大小是否合法</span><br><span class="line">	if dataLen &lt; d.minMsgSize || dataLen &gt; d.maxMsgSize &#123;</span><br><span class="line">		return fmt.Errorf(&quot;invalid message write size (%d) maxMsgSize=%d&quot;, dataLen, d.maxMsgSize)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	//将缓冲区清空</span><br><span class="line">	d.writeBuf.Reset()</span><br><span class="line">	//将消息大小写入缓冲区</span><br><span class="line">	err = binary.Write(&amp;d.writeBuf, binary.BigEndian, dataLen)</span><br><span class="line">	if err != nil &#123;</span><br><span class="line">		return err</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	//将消息写入缓冲区</span><br><span class="line">	_, err = d.writeBuf.Write(data)</span><br><span class="line">	if err != nil &#123;</span><br><span class="line">		return err</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	// only write to the file once</span><br><span class="line">	//将缓冲区关联到文件</span><br><span class="line">	_, err = d.writeFile.Write(d.writeBuf.Bytes())</span><br><span class="line">	if err != nil &#123;</span><br><span class="line">		d.writeFile.Close()</span><br><span class="line">		d.writeFile = nil</span><br><span class="line">		return err</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	//计算总大小</span><br><span class="line">	totalBytes := int64(4 + dataLen)</span><br><span class="line">	d.writePos += totalBytes</span><br><span class="line">	//队列消息数量+1</span><br><span class="line">	atomic.AddInt64(&amp;d.depth, 1)</span><br><span class="line"></span><br><span class="line">	//如果写入位置大于了文件最大大小</span><br><span class="line">	if d.writePos &gt;= d.maxBytesPerFile &#123;</span><br><span class="line">		//将当前写入文件+1</span><br><span class="line">		d.writeFileNum++</span><br><span class="line">		//当前写入位置重置为0</span><br><span class="line">		d.writePos = 0</span><br><span class="line"></span><br><span class="line">		// sync every time we start writing to a new file</span><br><span class="line">		//将缓存数据写入到磁盘</span><br><span class="line">		err = d.sync()</span><br><span class="line">		if err != nil &#123;</span><br><span class="line">			d.logf(ERROR, &quot;DISKQUEUE(%s) failed to sync - %s&quot;, d.name, err)</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		if d.writeFile != nil &#123;</span><br><span class="line">			d.writeFile.Close()</span><br><span class="line">			d.writeFile = nil</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	return err</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="读取队列"><a href="#读取队列" class="headerlink" title="读取队列"></a>读取队列</h2><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br></pre></td><td class="code"><pre><span class="line">func (d *diskQueue) readOne() ([]byte, error) &#123;</span><br><span class="line">	var err error</span><br><span class="line">	var msgSize int32</span><br><span class="line"></span><br><span class="line">	// 当前读取文件是否打开，没有则打开当前文件</span><br><span class="line">	if d.readFile == nil &#123;</span><br><span class="line">		// 打开读取的文件（也就是当前队列头所在的文件），如果文件大小到达上线maxBytesPerFile，readFileNum加一</span><br><span class="line">		curFileName := d.fileName(d.readFileNum)</span><br><span class="line">		d.readFile, err = os.OpenFile(curFileName, os.O_RDONLY, 0600)</span><br><span class="line">		if err != nil &#123;</span><br><span class="line">			return nil, err</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		d.logf(INFO, &quot;DISKQUEUE(%s): readOne() opened %s&quot;, d.name, curFileName)</span><br><span class="line"></span><br><span class="line">		//当前队列头在当前读取文件的位置</span><br><span class="line">		if d.readPos &gt; 0 &#123;</span><br><span class="line">			_, err = d.readFile.Seek(d.readPos, 0)</span><br><span class="line">			if err != nil &#123;</span><br><span class="line">				d.readFile.Close()</span><br><span class="line">				d.readFile = nil</span><br><span class="line">				return nil, err</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		d.reader = bufio.NewReader(d.readFile)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	// 先读取出消息的大小</span><br><span class="line">	err = binary.Read(d.reader, binary.BigEndian, &amp;msgSize)</span><br><span class="line">	if err != nil &#123;</span><br><span class="line">		d.readFile.Close()</span><br><span class="line">		d.readFile = nil</span><br><span class="line">		return nil, err</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	//判断消息大小是否合法</span><br><span class="line">	if msgSize &lt; d.minMsgSize || msgSize &gt; d.maxMsgSize &#123;</span><br><span class="line">		// this file is corrupt and we have no reasonable guarantee on</span><br><span class="line">		// where a new message should begin</span><br><span class="line">		d.readFile.Close()</span><br><span class="line">		d.readFile = nil</span><br><span class="line">		return nil, fmt.Errorf(&quot;invalid message read size (%d)&quot;, msgSize)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	//读取消息</span><br><span class="line">	readBuf := make([]byte, msgSize)</span><br><span class="line">	_, err = io.ReadFull(d.reader, readBuf)</span><br><span class="line">	if err != nil &#123;</span><br><span class="line">		d.readFile.Close()</span><br><span class="line">		d.readFile = nil</span><br><span class="line">		return nil, err</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	totalBytes := int64(4 + msgSize)</span><br><span class="line"></span><br><span class="line">	//将下一个要读取的位置往后移</span><br><span class="line">	d.nextReadPos = d.readPos + totalBytes</span><br><span class="line">	d.nextReadFileNum = d.readFileNum</span><br><span class="line"></span><br><span class="line">	//判断下一个读取的位置是不是超过了文件大小</span><br><span class="line">	if d.nextReadPos &gt; d.maxBytesPerFile &#123;</span><br><span class="line">		if d.readFile != nil &#123;</span><br><span class="line">			d.readFile.Close()</span><br><span class="line">			d.readFile = nil</span><br><span class="line">		&#125;</span><br><span class="line">		//如果超过了，则当前队列头文件要往后移，且读取位置设置为0</span><br><span class="line">		d.nextReadFileNum++</span><br><span class="line">		d.nextReadPos = 0</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	return readBuf, nil</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">// 刷新缓存到磁盘</span><br><span class="line">func (d *diskQueue) sync() error &#123;</span><br><span class="line">	if d.writeFile != nil &#123;</span><br><span class="line">		// 将缓冲区的数据从内存中拷贝刷新到硬盘中保存</span><br><span class="line">		err := d.writeFile.Sync()</span><br><span class="line">		if err != nil &#123;</span><br><span class="line">			d.writeFile.Close()</span><br><span class="line">			d.writeFile = nil</span><br><span class="line">			return err</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	//保存元数据</span><br><span class="line">	err := d.persistMetaData()</span><br><span class="line">	if err != nil &#123;</span><br><span class="line">		return err</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	d.needSync = false</span><br><span class="line">	return nil</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>五、ioLoop循环</p>
+<p>这个函数是一个“守护”协程，<br>暴露的d.writeChan和d.readChan<br>如果外部有网writeChan里写数据在这里处理<br>同时，这里的消息也会通过d.readChan将消息不断的从队列中往外推</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br></pre></td><td class="code"><pre><span class="line">func (d *diskQueue) ioLoop() &#123;</span><br><span class="line">	var dataRead []byte</span><br><span class="line">	var err error</span><br><span class="line">	var count int64</span><br><span class="line">	var r chan []byte</span><br><span class="line"></span><br><span class="line">	//开启一个timer，syncTimeout在系统配置里，默认是2秒一次</span><br><span class="line">	syncTicker := time.NewTicker(d.syncTimeout)</span><br><span class="line"></span><br><span class="line">	for &#123;</span><br><span class="line">		// SyncEvery是系统配置，默认值是2500</span><br><span class="line">		// 也就是如果现在这段代码中的count的值如果到了2500,则将缓存中的数据保存到磁盘</span><br><span class="line">		if count == d.syncEvery &#123;</span><br><span class="line">			d.needSync = true</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		// needSync这个字段如果为true，则将缓存中的数据保存到磁盘</span><br><span class="line">		if d.needSync &#123;</span><br><span class="line">			err = d.sync()</span><br><span class="line">			if err != nil &#123;</span><br><span class="line">				d.logf(ERROR, &quot;DISKQUEUE(%s) failed to sync - %s&quot;, d.name, err)</span><br><span class="line">			&#125;</span><br><span class="line">			//同步缓存到磁盘成功，将count重置为0</span><br><span class="line">			count = 0</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		//如果队列头和尾中间还有数据，则从头部读取数据</span><br><span class="line">		if (d.readFileNum &lt; d.writeFileNum) || (d.readPos &lt; d.writePos) &#123;</span><br><span class="line">			if d.nextReadPos == d.readPos &#123;</span><br><span class="line">				dataRead, err = d.readOne()</span><br><span class="line">				if err != nil &#123;</span><br><span class="line">					d.logf(ERROR, &quot;DISKQUEUE(%s) reading at %d of %s - %s&quot;,</span><br><span class="line">						d.name, d.readPos, d.fileName(d.readFileNum), err)</span><br><span class="line">					d.handleReadError()</span><br><span class="line">					continue</span><br><span class="line">				&#125;</span><br><span class="line">			&#125;</span><br><span class="line">			//这里读取的数据放到readChan这个通道里</span><br><span class="line">			r = d.readChan</span><br><span class="line">		&#125; else &#123;</span><br><span class="line">			r = nil</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		select &#123;</span><br><span class="line">		// the Go channel spec dictates that nil channel operations (read or write)</span><br><span class="line">		// in a select are skipped, we set r to d.readChan only when there is data to read</span><br><span class="line">		//看上面的英文注释，如果r为空，则这个分支会被跳过，这是golang的一个特性</span><br><span class="line">		//将读取的消息，丢到d.readChan里面，r.readChan向外部暴露</span><br><span class="line">		case r &lt;- dataRead:</span><br><span class="line">			count++</span><br><span class="line">			// moveForward sets needSync flag if a file is removed</span><br><span class="line">			//moveForward()会删除已经没用的file，这个文件中的数据已经全部被读取了，不在队列头和尾之间了</span><br><span class="line">			d.moveForward()</span><br><span class="line">		case &lt;-d.emptyChan:</span><br><span class="line">			d.emptyResponseChan &lt;- d.deleteAllFiles()</span><br><span class="line">			count = 0</span><br><span class="line">		case dataWrite := &lt;-d.writeChan:</span><br><span class="line">			//如果d.writeChan有写入数据，则将消息数据写入到队列</span><br><span class="line">			count++</span><br><span class="line">			d.writeResponseChan &lt;- d.writeOne(dataWrite)</span><br><span class="line">		case &lt;-syncTicker.C:</span><br><span class="line">			//这里相当于两秒钟同步一次缓存到磁盘</span><br><span class="line">			if count == 0 &#123;</span><br><span class="line">				// avoid sync when there&#x27;s no activity</span><br><span class="line">				continue</span><br><span class="line">			&#125;</span><br><span class="line">			d.needSync = true</span><br><span class="line">		case &lt;-d.exitChan:</span><br><span class="line">			goto exit</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">exit:</span><br><span class="line">	d.logf(INFO, &quot;DISKQUEUE(%s): closing ... ioLoop&quot;, d.name)</span><br><span class="line">	syncTicker.Stop()</span><br><span class="line">	d.exitSyncChan &lt;- 1</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+      </div>
+      
+        <div class="prev-or-next">
+          <div class="post-foot-next">
+            
+          </div>
+          <div class="post-attach">
+            <span class="post-pubtime">
+              <i class="iconfont icon-updatetime mr-10" title="更新时间"></i>
+              2023-05-03 00:59:23
+            </span>
+            
+                  <span class="post-categories">
+                    <i class="iconfont icon-bookmark" title="分类"></i>
+                    
+                    <span class="span--category">
+                      <a href="/categories/Golang/" title="Golang">
+                        <b>#</b> Golang
+                      </a>
+                    </span>
+                    
+                  </span>
+              
+                  <span class="post-tags">
+                    <i class="iconfont icon-tags mr-10" title="标签"></i>
+                    
+                    <span class="span--tag mr-8">
+                      <a href="/tags/Golang/" title="Golang">
+                        #Golang
+                      </a>
+                    </span>
+                    
+                    <span class="span--tag mr-8">
+                      <a href="/tags/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/" title="源码阅读">
+                        #源码阅读
+                      </a>
+                    </span>
+                    
+                    <span class="span--tag mr-8">
+                      <a href="/tags/Nsq/" title="Nsq">
+                        #Nsq
+                      </a>
+                    </span>
+                    
+                  </span>
+              
+          </div>
+          <div class="post-foot-prev">
+            
+              <a href="/2021/03/11/nsq%E6%BA%90%E7%A0%81-topic/" target="_self">
+                <span>下一页</span>
+                <i class="iconfont icon-chevronright"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+    </div>
+    
+  <div id="btn-catalog" class="btn-catalog">
+    <i class="iconfont icon-catalog"></i>
+  </div>
+  <div class="post-catalog hidden" id="catalog">
+    <div class="title">目录</div>
+    <div class="catalog-content">
+      
+        <ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#nsq%E6%BA%90%E7%A0%81-diskqueue"><span class="toc-text">nsq源码-diskqueue</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80%E3%80%81%E9%98%9F%E5%88%97%E5%AD%98%E5%82%A8"><span class="toc-text">一、队列存储</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BA%8C%E3%80%81%E5%86%99%E5%85%A5%E9%98%9F%E5%88%97"><span class="toc-text">二、写入队列</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%AF%BB%E5%8F%96%E9%98%9F%E5%88%97"><span class="toc-text">读取队列</span></a></li></ol></li></ol>
+      
+    </div>
+  </div>
+
+  
+<script src="/js/catalog.js"></script>
+
+
+
+
+    
+      <div class="comments-container">
+        
+
+
+
+
+
+
+
+      </div>
+    
+  </div>
+
+
+        
+<div class="footer">
+  <div class="social">
+    <ul>
+      
+        <li>
+          <a title="github" target="_blank" rel="noopener" href="https://github.com/werbenhu">
+            <i class="iconfont icon-github"></i>
+          </a>
+        </li>
+      
+    </ul>
+  </div>
+  
+    
+    <div class="footer-more">
+      
+        <a target="_blank" rel="noopener" href="https://github.com/werbenhu">Copyright © 2023 werbenhu</a>
+        
+    </div>
+  
+    
+    <div class="footer-more">
+      
+        <a target="_blank" rel="noopener" href="https://github.com/zchengsite/hexo-theme-oranges">Theme by Oranges | Powered by Hexo</a>
+        
+    </div>
+  
+  
+</div>
+
+      </div>
+
+      <div class="tools-bar">
+        <div class="back-to-top tools-bar-item hidden">
+  <a href="javascript: void(0)">
+    <i class="iconfont icon-chevronup"></i>
+  </a>
+</div>
+
+
+<script src="/js/backtotop.js"></script>
+
+
+
+        
+  <div class="search-icon tools-bar-item" id="search-icon">
+    <a href="javascript: void(0)">
+      <i class="iconfont icon-search"></i>
+    </a>
+  </div>
+
+  <div class="search-overlay hidden">
+    <div class="search-content" tabindex="0">
+      <div class="search-title">
+        <span class="search-icon-input">
+          <a href="javascript: void(0)">
+            <i class="iconfont icon-search"></i>
+          </a>
+        </span>
+        
+          <input type="text" class="search-input" id="search-input" placeholder="搜索...">
+        
+        <span class="search-close-icon" id="search-close-icon">
+          <a href="javascript: void(0)">
+            <i class="iconfont icon-close"></i>
+          </a>
+        </span>
+      </div>
+      <div class="search-result" id="search-result"></div>
+    </div>
+  </div>
+
+  <script type="text/javascript">
+    var inputArea = document.querySelector("#search-input")
+    var searchOverlayArea = document.querySelector(".search-overlay")
+
+    inputArea.onclick = function() {
+      getSearchFile()
+      this.onclick = null
+    }
+
+    inputArea.onkeydown = function() {
+      if(event.keyCode == 13)
+        return false
+    }
+
+    function openOrHideSearchContent() {
+      let isHidden = searchOverlayArea.classList.contains('hidden')
+      if (isHidden) {
+        searchOverlayArea.classList.remove('hidden')
+        document.body.classList.add('hidden')
+        // inputArea.focus()
+      } else {
+        searchOverlayArea.classList.add('hidden')
+        document.body.classList.remove('hidden')
+      }
+    }
+
+    function blurSearchContent(e) {
+      if (e.target === searchOverlayArea) {
+        openOrHideSearchContent()
+      }
+    }
+
+    document.querySelector("#search-icon").addEventListener("click", openOrHideSearchContent, false)
+    document.querySelector("#search-close-icon").addEventListener("click", openOrHideSearchContent, false)
+    searchOverlayArea.addEventListener("click", blurSearchContent, false)
+
+    var searchFunc = function (path, search_id, content_id) {
+      'use strict';
+      var $input = document.getElementById(search_id);
+      var $resultContent = document.getElementById(content_id);
+      $resultContent.innerHTML = "<ul><span class='local-search-empty'>首次搜索，正在载入索引文件，请稍后……<span></ul>";
+      $.ajax({
+        // 0x01. load xml file
+        url: path,
+        dataType: "xml",
+        success: function (xmlResponse) {
+          // 0x02. parse xml file
+          var datas = $("entry", xmlResponse).map(function () {
+            return {
+              title: $("title", this).text(),
+              content: $("content", this).text(),
+              url: $("url", this).text()
+            };
+          }).get();
+          $resultContent.innerHTML = "";
+
+          $input.addEventListener('input', function () {
+            // 0x03. parse query to keywords list
+            var str = '<ul class=\"search-result-list\">';
+            var keywords = this.value.trim().toLowerCase().split(/[\s\-]+/);
+            $resultContent.innerHTML = "";
+            if (this.value.trim().length <= 0) {
+              return;
+            }
+            // 0x04. perform local searching
+            datas.forEach(function (data) {
+              var isMatch = true;
+              var content_index = [];
+              if (!data.title || data.title.trim() === '') {
+                data.title = "Untitled";
+              }
+              var orig_data_title = data.title.trim();
+              var data_title = orig_data_title.toLowerCase();
+              var orig_data_content = data.content.trim().replace(/<[^>]+>/g, "");
+              var data_content = orig_data_content.toLowerCase();
+              var data_url = data.url;
+              var index_title = -1;
+              var index_content = -1;
+              var first_occur = -1;
+              // only match artiles with not empty contents
+              if (data_content !== '') {
+                keywords.forEach(function (keyword, i) {
+                  index_title = data_title.indexOf(keyword);
+                  index_content = data_content.indexOf(keyword);
+
+                  if (index_title < 0 && index_content < 0) {
+                    isMatch = false;
+                  } else {
+                    if (index_content < 0) {
+                      index_content = 0;
+                    }
+                    if (i == 0) {
+                      first_occur = index_content;
+                    }
+                    // content_index.push({index_content:index_content, keyword_len:keyword_len});
+                  }
+                });
+              } else {
+                isMatch = false;
+              }
+              // 0x05. show search results
+              if (isMatch) {
+                str += "<li><a href='" + data_url + "' class='search-result-title'>" + orig_data_title + "</a>";
+                var content = orig_data_content;
+                if (first_occur >= 0) {
+                  // cut out 100 characters
+                  var start = first_occur - 20;
+                  var end = first_occur + 80;
+
+                  if (start < 0) {
+                    start = 0;
+                  }
+
+                  if (start == 0) {
+                    end = 100;
+                  }
+
+                  if (end > content.length) {
+                    end = content.length;
+                  }
+
+                  var match_content = content.substr(start, end);
+
+                  // highlight all keywords
+                  keywords.forEach(function (keyword) {
+                    var regS = new RegExp(keyword, "gi");
+                    match_content = match_content.replace(regS, "<span class=\"search-keyword\">" + keyword + "</span>");
+                  });
+
+                  str += "<p class=\"search-result-abstract\">" + match_content + "...</p>"
+                }
+                str += "</li>";
+              }
+            });
+            str += "</ul>";
+            if (str.indexOf('<li>') === -1) {
+              return $resultContent.innerHTML = "<ul><span class='local-search-empty'>没有找到内容，请尝试更换检索词。<span></ul>";
+            }
+            $resultContent.innerHTML = str;
+          });
+        },
+        error: function(xhr, status, error) {
+          $resultContent.innerHTML = ""
+          if (xhr.status === 404) {
+            $resultContent.innerHTML = "<ul><span class='local-search-empty'>未找到search.xml文件，具体请参考：<a href='https://github.com/zchengsite/hexo-theme-oranges#configuration' target='_black'>configuration</a><span></ul>";
+          } else {
+            $resultContent.innerHTML = "<ul><span class='local-search-empty'>请求失败，尝试重新刷新页面或稍后重试。<span></ul>";
+          }
+        }
+      });
+      $(document).on('click', '#search-close-icon', function() {
+        $('#search-input').val('');
+        $('#search-result').html('');
+      });
+    }
+
+    var getSearchFile = function() {
+        var path = "/search.xml";
+        searchFunc(path, 'search-input', 'search-result');
+    }
+  </script>
+
+
+
+
+        
+  <div class="tools-bar-item theme-icon" id="switch-color-scheme">
+    <a href="javascript: void(0)">
+      <i id="theme-icon" class="iconfont icon-moon"></i>
+    </a>
+  </div>
+
+  
+<script src="/js/colorscheme.js"></script>
+
+
+
+
+
+        
+  
+    <div class="share-icon tools-bar-item">
+      <a href="javascript: void(0)" id="share-icon">
+        <i class="iconfont iconshare"></i>
+      </a>
+      <div class="share-content hidden">
+        
+          <a class="share-item" href="https://twitter.com/intent/tweet?text=' + nsq%E6%BA%90%E7%A0%81-diskqueue + '&url=' + http%3A%2F%2Fexample.com%2F2021%2F03%2F11%2Fnsq%25E6%25BA%2590%25E7%25A0%2581-diskqueue%2F + '" target="_blank" title="Twitter">
+            <i class="iconfont icon-twitter"></i>
+          </a>
+        
+        
+          <a class="share-item" href="https://www.facebook.com/sharer.php?u=http://example.com/2021/03/11/nsq%E6%BA%90%E7%A0%81-diskqueue/" target="_blank" title="Facebook">
+            <i class="iconfont icon-facebooksquare"></i>
+          </a>
+        
+      </div>
+    </div>
+  
+  
+<script src="/js/shares.js"></script>
+
+
+
+      </div>
+    </div>
+  </body>
+</html>
