@@ -1,0 +1,479 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>nsq源码-channel - werbenhu的个人博客</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">werbenhu的个人博客</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="nsq源码-diskqueue"><a class="header" href="#nsq源码-diskqueue">nsq源码-diskqueue</a></h1>
+<p>channel有下面几个重要的成员，其实跟topic还有点像，都有一个memoryMsgChan和diskqueue</p>
+<ol>
+<li>
+<p><strong>memoryMsgChan</strong>： 这是存放消息的内存，就是一个通道，通道的大小MemQueueSize，
+默认配置是10000，也就是如果堆积的消息超过10000就会使用磁盘了</p>
+</li>
+<li>
+<p><strong>backend</strong> ：就是diskqueue，这个就是磁盘存储消息的地方了，关于这个diskqueue，请参考：https://www.cnblogs.com/werben/p/14517781.html</p>
+</li>
+<li>
+<p><strong>clients</strong> ： Consumer 这里关联的是客户端的订阅者</p>
+</li>
+<li>
+<p><strong>deferredMessages和deferredPQ</strong> ： 延迟消息存放的地方，其中deferredPQ，是一个优先级管理的队列，直接丢在内存</p>
+</li>
+<li>
+<p><strong>inFlightMessages和inFlightPQ</strong>: 这个标识正在执行中的消息，也是直接丢在内存</p>
+</li>
+</ol>
+<p>topic在messagePump()中处理消息的时候，通过下面两个函数，将消息投递到channel。</p>
+<pre><code>//延时消息
+channel.PutMessageDeferred(chanMsg, chanMsg.deferred)
+//非延时消息
+channel.PutMessage(chanMsg)
+</code></pre>
+<p>在这里我们看不到Channel的“守护”协程，也就是我们只看到topic将msg投递到channel，channel将延时消息丢到队列中，但是找不到channel从队列中取出数据发送给client consumer的地方</p>
+<p>找到channel的两个函数, 看了下就是这两个函数将msg发送给client consumer的</p>
+<pre><code>func (c *Channel) processDeferredQueue(t int64) bool
+func (c *Channel) processInFlightQueue(t int64) bool
+</code></pre>
+<p>但是channel本身没有“守护”协程，一直运行来调用这两个函数，找这两个函数调用的地方，一直往上找调用者。最终找到“守护”协程在哪里了。</p>
+<p>原来在nsqd里面运行了一个queueScanLoop的“守护”协程。</p>
+<h2 id="一nsqdqueuescanloop"><a class="header" href="#一nsqdqueuescanloop">一、nsqd.queueScanLoop</a></h2>
+<pre><code class="language-go">//nsqd.go
+
+func (n *NSQD) queueScanLoop() {
+	workCh := make(chan *Channel, n.getOpts().QueueScanSelectionCount)
+	responseCh := make(chan bool, n.getOpts().QueueScanSelectionCount)
+	closeCh := make(chan int)
+
+	//定时执行loop的间隔时间，默认100ms
+	workTicker := time.NewTicker(n.getOpts().QueueScanInterval)
+	//刷新channel数量，重新调整协程池，默认时间是5s刷新一次
+	refreshTicker := time.NewTicker(n.getOpts().QueueScanRefreshInterval)
+
+	channels := n.channels()
+	n.resizePool(len(channels), workCh, responseCh, closeCh)
+
+	for {
+		select {
+		case &lt;-workTicker.C:
+			if len(channels) == 0 {
+				continue
+			}
+		case &lt;-refreshTicker.C:
+			channels = n.channels()
+			n.resizePool(len(channels), workCh, responseCh, closeCh)
+			continue
+		case &lt;-n.exitChan:
+			goto exit
+		}
+
+		num := n.getOpts().QueueScanSelectionCount
+		if num &gt; len(channels) {
+			num = len(channels)
+		}
+
+	loop:
+		//从 channels 中随机选择 num 个 channel
+		for _, i := range util.UniqRands(num, len(channels)) {
+			workCh &lt;- channels[i]
+		}
+
+		//等待处理响应，记录失败次数
+		numDirty := 0
+		for i := 0; i &lt; num; i++ {
+			if &lt;-responseCh {
+				numDirty++
+			}
+		}
+
+		//queueScanLoop的处理方法模仿了Redis的概率到期算法
+		//(probabilistic expiration algorithm)，
+		//每过一个QueueScanInterval(默认100ms)间隔，进行一次概率选择，
+		//从所有的channel缓存中随机选择QueueScanSelectionCount(默认20)个channel，
+		//如果某个被选中channel存在InFlighting消息或者Deferred消息，
+		//则认为该channel为“脏”channel。
+		//如果被选中channel中“脏”channel的比例大于QueueScanDirtyPercent(默认25%)，
+		//则不投入睡眠，直接进行下一次概率选择
+		if float64(numDirty)/float64(num) &gt; n.getOpts().QueueScanDirtyPercent {
+			goto loop
+		}
+	}
+
+exit:
+	n.logf(LOG_INFO, "QUEUESCAN: closing")
+	close(closeCh)
+	workTicker.Stop()
+	refreshTicker.Stop()
+}
+
+//协程池调整
+func (n *NSQD) resizePool(num int, workCh chan *Channel, responseCh chan bool, closeCh chan int) {
+
+	// 协程池大小 = 总channel数 / 4
+	idealPoolSize := int(float64(num) * 0.25)
+	if idealPoolSize &lt; 1 {
+		idealPoolSize = 1
+	} else if idealPoolSize &gt; n.getOpts().QueueScanWorkerPoolMax {
+		//idealPoolSize 协程池大小，最大默认是4个
+		idealPoolSize = n.getOpts().QueueScanWorkerPoolMax
+	}
+	for {
+		if idealPoolSize == n.poolSize {
+			break
+		} else if idealPoolSize &lt; n.poolSize {
+			// contract
+			// 协程池协程容量 &lt; 当前已经开启的协程数量
+			// 说明开启的协程过多，需要关闭协程
+			// closeCh queueScanWorker会中断“守护”协程
+			// 关闭后，将当前开启的协程数量-1
+			closeCh &lt;- 1
+			n.poolSize--
+		} else {
+			// expand
+			// 协程池协程容量 &gt; 当前已经开启的协程数量
+			// 开启新的协程
+			n.waitGroup.Wrap(func() {
+				n.queueScanWorker(workCh, responseCh, closeCh)
+			})
+			n.poolSize++
+		}
+	}
+}
+
+// 真正调用channel.processInFlightQueue的地方
+func (n *NSQD) queueScanWorker(workCh chan *Channel, responseCh chan bool, closeCh chan int) {
+	for {
+		select {
+		case c := &lt;-workCh:
+			//处理一次某个channel的消息
+			now := time.Now().UnixNano()
+			dirty := false
+			if c.processInFlightQueue(now) {
+				dirty = true
+			}
+			if c.processDeferredQueue(now) {
+				dirty = true
+			}
+			//如果这个channel有消息，则设置为dirty=true
+			responseCh &lt;- dirty
+		case &lt;-closeCh:
+			return
+		}
+	}
+}
+</code></pre>
+<h2 id="二channelprocessinflightqueue"><a class="header" href="#二channelprocessinflightqueue">二、channel.processInFlightQueue</a></h2>
+<p>现在搞清楚了processInFlightQueue调用的地方，那这个processInFlightQueue到底做了什么</p>
+<pre><code class="language-go">func (c *Channel) processInFlightQueue(t int64) bool {
+	c.exitMutex.RLock()
+	defer c.exitMutex.RUnlock()
+
+	if c.Exiting() {
+		return false
+	}
+
+	dirty := false
+	for {
+		c.inFlightMutex.Lock()
+		msg, _ := c.inFlightPQ.PeekAndShift(t)
+		c.inFlightMutex.Unlock()
+
+		if msg == nil {
+			goto exit
+		}
+
+		//只要有消息就标识这个通道是脏的
+		dirty = true
+
+		_, err := c.popInFlightMessage(msg.clientID, msg.ID)
+		if err != nil {
+			goto exit
+		}
+		atomic.AddUint64(&amp;c.timeoutCount, 1)
+		c.RLock()
+		client, ok := c.clients[msg.clientID]
+		c.RUnlock()
+		if ok {
+			client.TimedOutMessage()
+		}
+		//循环将channel中存在inFlightPQ中消息put出去
+		//put到memoryMsgChan或者磁盘
+		c.put(msg)
+	}
+
+exit:
+	return dirty
+}
+
+func (c *Channel) put(m *Message) error {
+	select {
+	//将消息写入到memoryMsgChan中去
+	case c.memoryMsgChan &lt;- m:
+	//如果memoryMsgChan满了则将消息写到磁盘中区
+	default:
+		err := writeMessageToBackend(m, c.backend)
+		c.nsqd.SetHealth(err)
+		if err != nil {
+			c.nsqd.logf(LOG_ERROR, "CHANNEL(%s): failed to write message to backend - %s",
+				c.name, err)
+			return err
+		}
+	}
+	return nil
+}
+</code></pre>
+<h2 id="三channelprocessdeferredqueue"><a class="header" href="#三channelprocessdeferredqueue">三、channel.processDeferredQueue</a></h2>
+<p>接下来看看延时消息是怎么处理的
+延时消息看起来跟非延时消息没什么区别
+其实是有区别的，区别就在c.deferredPQ.PeekAndShift(t)这里</p>
+<pre><code class="language-go">func (c *Channel) processDeferredQueue(t int64) bool {
+	c.exitMutex.RLock()
+	defer c.exitMutex.RUnlock()
+
+	if c.Exiting() {
+		return false
+	}
+
+	dirty := false
+	for {
+		c.deferredMutex.Lock()
+		//区别在这个PeekAndShift里面
+		item, _ := c.deferredPQ.PeekAndShift(t)
+		c.deferredMutex.Unlock()
+
+		if item == nil {
+			goto exit
+		}
+		dirty = true
+
+		msg := item.Value.(*Message)
+		_, err := c.popDeferredMessage(msg.ID)
+		if err != nil {
+			goto exit
+		}
+		//put到memoryMsgChan或者磁盘
+		c.put(msg)
+	}
+
+exit:
+	return dirty
+}
+
+//pqueue.go 
+//max实参传入的是当前时间
+func (pq *PriorityQueue) PeekAndShift(max int64) (*Item, int64) {
+	if pq.Len() == 0 {
+		return nil, 0
+	}
+
+	item := (*pq)[0]
+	//存入延时消息时，Priority优先级就是消息的到期时间
+	//这里只有当前时间大于了消息的到期时间才回返回
+	if item.Priority &gt; max {
+		return nil, item.Priority - max
+	}
+	heap.Remove(pq, 0)
+
+	return item, 0
+}
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="Go-sync-Map-源码解读.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="nsq源码-diskqueue.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="Go-sync-Map-源码解读.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="nsq源码-diskqueue.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

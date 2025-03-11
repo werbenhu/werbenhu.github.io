@@ -1,0 +1,495 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>关于Copy-on-write的理解 - werbenhu的个人博客</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">werbenhu的个人博客</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h2 id="定义"><a class="header" href="#定义">定义</a></h2>
+<p>写入时复制（英语：<code>Copy-On-Write</code>，简称COW）是一种计算机程序设计领域的优化策略。其核心思想是，如果有多个调用者（callers）同时请求相同资源（如内存或磁盘上的数据存储），他们会共同获取相同的指针指向相同的资源，直到某个调用者试图修改资源的内容时，系统才会真正复制一份专用副本（private copy）给该调用者，而其他调用者所见到的最初的资源仍然保持不变。这过程对其他的调用者都是透明的。此作法主要的优点是如果调用者没有修改该资源，就不会有副本（private copy）被创建，因此多个调用者只是读取操作时可以共享同一份资源。<em>Copy-On-Write策略用于读多写少的并发场景。</em>
+上面的定义估计第一次看都有点蒙，我这里举一个实际例子，就很好理解了。</p>
+<h2 id="代码1---并发出错"><a class="header" href="#代码1---并发出错">代码1 - 并发出错</a></h2>
+<pre><code class="language-Go">package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+type CowMap map[int]string
+
+func (c *CowMap) Set(key int, value string) {
+	(*c)[key] = value
+}
+
+func (c *CowMap) Get(key int) string {
+	return (*c)[key]
+}
+
+func readLoop(c *CowMap) {
+	for {
+		fmt.Println(c.Get(3))
+	}
+}
+
+func writeLoop(c *CowMap) {
+	for i := 0; i &lt; 10000000; i++ {
+		//修改map的值
+		c.Set(3, "werben-"+strconv.Itoa(i))
+	}
+}
+
+func main() {
+	c := make(CowMap)
+	c.Set(1, "a")
+	c.Set(2, "b")
+	c.Set(3, "c")
+
+	go readLoop(&amp;c)
+	writeLoop(&amp;c)
+}
+</code></pre>
+<p>运行上面的代码，会出错：<code>fatal error: concurrent map read and map write</code>.
+因为有两个协程(主协程<code>writeLoop</code>和<code>readLoop</code>协程)同时读写同一个map，而这个map不是线程安全，所以会导致上面的出错。</p>
+<h2 id="代码2-引入读写锁"><a class="header" href="#代码2-引入读写锁">代码2-引入读写锁</a></h2>
+<p>为了解决上面的问题我们引入读写锁</p>
+<pre><code class="language-go">package main
+
+import (
+	"fmt"
+	"strconv"
+	"sync"
+)
+
+//读写锁
+var mu sync.RWMutex
+
+type CowMap map[int]string
+
+func (c *CowMap) Set(key int, value string) {
+	(*c)[key] = value
+}
+
+func (c *CowMap) Get(key int) string {
+	return (*c)[key]
+}
+
+func readLoop(c *CowMap) {
+	for {
+		//读的时候上读锁
+		mu.RLock()
+		fmt.Println(c.Get(3))
+		mu.RUnlock()
+	}
+}
+
+func writeLoop(c *CowMap) {
+	for i := 0; i &lt; 10000000; i++ {
+		//写的时候上写锁
+		mu.Lock()
+		c.Set(3, "werben-"+strconv.Itoa(i))
+		mu.Unlock()
+	}
+}
+
+func main() {
+	c := make(CowMap)
+	c.Set(1, "a")
+	c.Set(2, "b")
+	c.Set(3, "c")
+
+	go readLoop(&amp;c)
+	writeLoop(&amp;c)
+}
+运行上面的代码，不会报错了。
+如果我们将writeLoop()改成如下，每5秒写一次。
+func writeLoop(c *CowMap) {
+	for i := 0; i &lt; 10000000; i++ {
+		//每隔5s写一次
+		time.Sleep(time.Second*5)
+		//写的时候上写锁
+		mu.Lock()
+		c.Set(3, "werben-"+strconv.Itoa(i))
+		mu.Unlock()
+	}
+}
+</code></pre>
+<p>我们看下读写锁的特性：</p>
+<ul>
+<li>读锁不能阻塞读锁</li>
+<li>读锁需要阻塞写锁，直到所有读锁都释放</li>
+<li>写锁需要阻塞读锁，直到所有写锁都释放</li>
+<li>写锁需要阻塞写锁</li>
+</ul>
+<p>只是每隔5秒写一次，但是上面的读锁还是一直不断的上锁解锁，这个在没有写数据的时候，其实都是没有意义的。如果时间更长，比如1天才修改一次，读锁浪费了大量的无用资源。
+这时候，如果我们用copy-on-write策略，代码如下：</p>
+<h2 id="代码3---copy-on-write实现"><a class="header" href="#代码3---copy-on-write实现">代码3 - Copy-On-Write实现</a></h2>
+<pre><code class="language-go">package main
+
+import (
+	"fmt"
+	"strconv"
+	"sync"
+	"sync/atomic"
+)
+
+type tmap map[int]string
+
+type CowMap struct {
+	mu   sync.Mutex
+	data atomic.Value
+}
+
+func NewCowMap() *CowMap {
+	m := make(tmap)
+	c := &amp;CowMap{}
+	c.data.Store(m)
+	return c
+}
+
+func (c *CowMap) clone() tmap {
+	m := make(tmap)
+	for k, v := range c.data.Load().(tmap) {
+		m[k] = v
+	}
+	return m
+}
+
+func (c *CowMap) Get(key int) (value string, ok bool) {
+	value, ok = c.data.Load().(tmap)[key]
+	return
+}
+
+func (c *CowMap) Set(key int, value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	//写之前，先拷贝一个副本
+	copy := c.clone()
+	//修改副本
+	copy[key] = value
+	//修改副本数据后，将副本转正
+	c.data.Store(copy)
+}
+
+func readLoop(c *CowMap) {
+	for {
+		fmt.Println(c.Get(3))
+	}
+}
+
+func writeLoop(c *CowMap) {
+	for i := 0; i &lt; 10000000; i++ {
+		c.Set(3, "werben-"+strconv.Itoa(i))
+	}
+}
+
+func main() {
+	c := NewCowMap()
+	c.Set(1, "a")
+	c.Set(2, "b")
+	c.Set(3, "c")
+
+	go readLoop(c)
+	writeLoop(c)
+}
+</code></pre>
+<p>在写入之前先拷贝一个副本，对副本进行修改，副本修改之后，将副本转正。这时多个调用者只是读取时就可以不需要上锁了。</p>
+<h2 id="缺点"><a class="header" href="#缺点">缺点</a></h2>
+<ul>
+<li>内存占用问题
+因为Copy-On-Write的写时复制机制，所以在进行写操作的时候，内存里会同时驻扎两个对象的内存。</li>
+<li>数据一致性问题
+Copy-On-Write策略只能保证数据的最终一致性，不能保证数据的实时一致性。写入数据之后，不能保证马上读取到最新的数据。</li>
+</ul>
+<h2 id="实际应用"><a class="header" href="#实际应用">实际应用</a></h2>
+<p>我们来看下在golang官方库btree里是怎么使用Copy-On-Write策略的
+这个库的官方地址在这里，有兴趣的可以去读一读：https://github.com/google/btree
+首先在BTree定义里，定义了一个copyOnWriteContext, cow里实际就是保存了一个*node的数组，
+然后每个node里面也保存了一份cow。</p>
+<pre><code class="language-go">type BTree struct {
+	degree int
+	length int
+	root   *node
+	cow    *copyOnWriteContext
+}
+...
+
+type copyOnWriteContext struct {
+	freelist *FreeList
+}
+
+...
+type FreeList struct {
+	mu       sync.Mutex
+	freelist []*node
+}
+
+
+type node struct {
+	items    items
+	children children
+	cow      *copyOnWriteContext
+}
+BTree有一个Clone方法， 可以看到虽然clone出来一个新的cow2，但是cow1和cow2里指向的freelist却还是都是同一个地址(freelist)。也就是如果只是读取Clone()出来的新BTree，跟原先的是同一份freelist，freelist里面的node如果不修改，则都可以不需要重新拷贝。
+func (t *BTree) Clone() (t2 *BTree) {
+	// Create two entirely new copy-on-write contexts.
+	// This operation effectively creates three trees:
+	//   the original, shared nodes (old b.cow)
+	//   the new b.cow nodes
+	//   the new out.cow nodes
+	cow1, cow2 := *t.cow, *t.cow
+	out := *t
+	t.cow = &amp;cow1
+	out.cow = &amp;cow2
+	return &amp;out
+}
+当需要修改freelist里面的Node的时候
+func (t *BTree) ReplaceOrInsert(item Item) Item {
+	if item == nil {
+		panic("nil item being added to BTree")
+	}
+	if t.root == nil {
+		t.root = t.cow.newNode()
+		t.root.items = append(t.root.items, item)
+		t.length++
+		return nil
+	} else {
+		//这里判断一下需不需要重新拷贝node
+		t.root = t.root.mutableFor(t.cow)
+		if len(t.root.items) &gt;= t.maxItems() {
+			item2, second := t.root.split(t.maxItems() / 2)
+			oldroot := t.root
+			t.root = t.cow.newNode()
+			t.root.items = append(t.root.items, item2)
+			t.root.children = append(t.root.children, oldroot, second)
+		}
+	}
+	out := t.root.insert(item, t.maxItems())
+	if out == nil {
+		t.length++
+	}
+	return out
+}
+
+//这里的逻辑就是判断一下，是否需要重新复制node，并修改其值
+func (n *node) mutableFor(cow *copyOnWriteContext) *node {
+	//判断一下，当前node的cow和BTree里面的cow是不是同一个
+	if n.cow == cow {
+		//如果不是Clone()出来的BTree，则不涉及到拷贝,
+		//直接返回当前node,
+		return n
+	}
+
+	//如果是Clone()出来的新BTree，新的BTree里的cow是变动了的，
+	//这里要修改这个node,所以这个node的数据需要重新拷贝一份。
+	out := cow.newNode()
+	if cap(out.items) &gt;= len(n.items) {
+		out.items = out.items[:len(n.items)]
+	} else {
+		out.items = make(items, len(n.items), cap(n.items))
+	}
+	copy(out.items, n.items)
+	// Copy children
+	if cap(out.children) &gt;= len(n.children) {
+		out.children = out.children[:len(n.children)]
+	} else {
+		out.children = make(children, len(n.children), cap(n.children))
+	}
+	copy(out.children, n.children)
+	return out
+}
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="一个轻量级的事件发布-订阅框架，它可以简化-Go-协程之间的通信.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="一个轻量级的事件发布-订阅框架，它可以简化-Go-协程之间的通信.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

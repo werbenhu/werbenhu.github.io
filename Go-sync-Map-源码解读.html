@@ -1,0 +1,590 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Go-sync-Map-源码解读 - werbenhu的个人博客</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">werbenhu的个人博客</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="go-syncmap源码解读"><a class="header" href="#go-syncmap源码解读">Go sync.Map源码解读</a></h1>
+<h2 id="内置的map"><a class="header" href="#内置的map">内置的map</a></h2>
+<p>Go 的内置的 map 是不支持并发写操作的，不是并发安全的。</p>
+<p>看下面的代码运行会提示</p>
+<p><code>fatal error: concurrent map writes。</code></p>
+<pre><code class="language-go">package main
+
+import "time"
+
+var globleMap map[string]interface{}
+
+func MapEdit(key string) {
+	for i := 0; i &lt; 10000; i++ {
+		globleMap[key] = i
+	}
+}
+
+func main() {
+	globleMap = make(map[string]interface{})
+	go MapEdit("1")
+	go MapEdit("2")
+	time.Sleep(time.Second * 30)
+}
+</code></pre>
+<p>因此官方在go 1.9版本中给了 sync.Map来满足并发编程中的应用。</p>
+<p>这里实际上是一个lock-free，关于lock-free和wait-free可以看看这里：<a href="https://www.zhihu.com/question/295904223">wait-free是指什么?</a></p>
+<h2 id="syncmap"><a class="header" href="#syncmap">sync.Map</a></h2>
+<p>sync.Map 的实现原理可概括为：</p>
+<p>read和dirty
+我们可以这么理解，现在将map里面的数据分成两部分保存，我用两个桶来比喻，</p>
+<ul>
+<li>一些是干净(read)的，放在白桶</li>
+<li>一些是脏(dirty)的，放在脏桶，我这也叫黑桶</li>
+</ul>
+<p>另外我还要记录一下，这个脏的程度，怎么判断脏的程度呢，这里我用一个脏值(<code>misses</code>)来标识脏的程度，每次读数据时发现有一个数据(<code>key</code>)不在白桶而是在黑桶，我就将脏值数量(<code>misses</code>)+1，如果发现脏值(<code>misses</code>)居然比黑桶(<code>read</code>)里的数据总数量还多，那就得清洗一下黑桶(<code>dirty</code>)里面的数据了，将清洗完的脏(<code>dirty</code>)数据全部放到白桶(<code>read</code>)那里去，这时候黑桶所有的数据(<code>dirty</code>)被清空了，脏值(misses)也要重置为0</p>
+<p>白桶里面还贴了一个字条(<code>amended</code>: 英文释义修正的，改正的)，这个字条表示黑桶是不是刚刚被清洗收拾，因为黑桶不是一直被收拾的，每次当黑桶被收拾，脏值清空的时候，这个字条就写上“已收拾”（<code>amended=false</code>）。</p>
+<h3 id="写数据"><a class="header" href="#写数据">写数据</a></h3>
+<ul>
+<li>数据在白桶里</li>
+</ul>
+<p>一个新的数据key要保存到map里面，首先先查一下这个数据(key)是不是已经在白桶里面，如果数据在白桶里面，直接更新这个数据就行了。</p>
+<ul>
+<li>数据在黑桶里</li>
+</ul>
+<p>如果这个数据(key)不在白桶里(read)，字条还写着“欠收拾”那数据就有可能在黑桶(dirty)里，如果在黑桶(dirty)里找到了，更新这个黑桶(dirty)里面的数据(key)，同时更新下脏值(misses)+1，接下来还要判断下脏值的数据量不是已经比白桶(read)里面数据总量还大，如果是，那就得清洗下黑桶(dirty)里面的数据</p>
+<ul>
+<li>数据即不在白桶里，也不在黑桶里</li>
+</ul>
+<p>数据既不在白桶，也不在黑桶，要分两种情况</p>
+<p>白条写着“已收拾”，说明黑桶恰巧刚刚被收拾了，那么现在重新将白桶里面所有的数据又复制一份放到黑桶里面去，白桶里面字条改成“欠收拾”（<code>amended=true</code>)，然后直接写入数据到黑桶
+白桶里面写着“欠收拾”，说明黑桶里面有脏数据，但是又没到收拾他的时候，直接写入数据到黑桶</p>
+<h3 id="读数据"><a class="header" href="#读数据">读数据</a></h3>
+<ul>
+<li>数据在白桶</li>
+</ul>
+<p>直接从白桶取数据</p>
+<ul>
+<li>数据不在白桶，白条写着“欠收拾”</li>
+</ul>
+<p>说明黑桶有白桶不存在的数据，数据可能在黑桶，从黑桶取数据，如果key数据存在，脏值+1，判断是否需要清洗黑桶</p>
+<ul>
+<li>数据不在白桶，黑桶也找不到</li>
+</ul>
+<p>数据不存在，返回nil</p>
+<h4 id="用法问题"><a class="header" href="#用法问题">用法问题</a></h4>
+<p>看下面的示例，写入<code>map</code>1000个<code>key</code>，但是读取只读了900次<code>key</code>，</p>
+<p>这时候根本白桶的数据始终都会是空的，因为黑桶只有脏值到了1000才会将数据清洗到白桶。</p>
+<p>也就是这种情况，可能效率还没有自己写的使用内置的<code>map</code>，加锁的效率高。</p>
+<p>所以<em>sync.map适合少量写，大量读的场景</em></p>
+<pre><code class="language-go">package main
+
+import (
+	"math/rand"
+	"testgorm/mymap"
+	"time"
+)
+
+func main() {
+	var m mymap.Map
+	//写入1000个key，这时黑桶数据数量是1000
+	for i := 0; i &lt; 1000; i++ {
+		rand.Seed(time.Now().UnixNano())
+		data := rand.Intn(1000)
+		m.Store(i, data)
+	}
+	//读取900次key，这时候脏值为900 &lt; 黑桶数据数量
+  //白桶的数据一直都是空的，因为黑桶一直没到清洗的条件
+	for i := 0; i &lt; 900; i++ {
+		if _, ok := m.Load(i); ok {
+		}
+	}
+}
+</code></pre>
+<h2 id="源码阅读"><a class="header" href="#源码阅读">源码阅读</a></h2>
+<pre><code class="language-go">package mymap
+
+import (
+	"fmt"
+	"sync"
+	"sync/atomic"
+	"unsafe"
+)
+
+type Map struct {
+	//用来锁dirty
+	mu sync.Mutex
+	//白桶
+	read atomic.Value
+	//黑桶
+	dirty map[interface{}]*entry
+	//脏值
+	misses int
+}
+
+type readOnly struct {
+	//封装的map
+	m map[interface{}]*entry
+	//白条
+	amended bool
+}
+
+//expunged是一个指针指向一个空对象，也就是指向interface{}
+var expunged = unsafe.Pointer(new(interface{}))
+
+//entry就是一个指针
+type entry struct {
+	p unsafe.Pointer
+}
+
+func newEntry(i interface{}) *entry {
+	return &amp;entry{p: unsafe.Pointer(&amp;i)}
+}
+
+//从sync.map读数据
+func (m *Map) Load(key interface{}) (value interface{}, ok bool) {
+	//先看白桶里面有没有key
+	read, _ := m.read.Load().(readOnly)
+	//有则直接返回
+	e, ok := read.m[key]
+	//如果白桶里没有这个key，而且白条写着“欠收拾”，说明黑桶里面可能有key
+	if !ok &amp;&amp; read.amended {
+		m.mu.Lock()
+		//上面白桶获取时没有加锁，上锁后再检查一次
+		read, _ = m.read.Load().(readOnly)
+		e, ok = read.m[key]
+		//再检查一次也没有，则直接从黑桶里面读取数据
+		if !ok &amp;&amp; read.amended {
+			e, ok = m.dirty[key]
+            //脏值+1, 如果脏值比黑桶数据数量还大，则收拾黑桶
+			m.missLocked()
+		}
+		m.mu.Unlock()
+	}
+	//如果白桶黑桶里都没有数据，返回nil
+	if !ok {
+		return nil, false
+	}
+	//返回entry指针对应的值
+	return e.load()
+}
+
+//获取entry指针对应的值
+func (e *entry) load() (value interface{}, ok bool) {
+	p := atomic.LoadPointer(&amp;e.p)
+	if p == nil || p == expunged {
+		return nil, false
+	}
+	return *(*interface{})(p), true
+}
+
+//往sync.map写数据
+func (m *Map) Store(key, value interface{}) {
+	//先看白桶里面有没有key
+	read, _ := m.read.Load().(readOnly)
+	//白桶存在key直接更新白桶里面的数据
+	if e, ok := read.m[key]; ok &amp;&amp; e.tryStore(&amp;value) {
+		return
+	}
+
+	m.mu.Lock()
+	//上面白桶获取没有加锁，上锁后再写入一次白桶
+	read, _ = m.read.Load().(readOnly)
+	if e, ok := read.m[key]; ok {
+		if e.unexpungeLocked() {
+			//白桶存在key直接更新白桶里面的数据
+			m.dirty[key] = e
+		}
+		//将黑桶里面的key也指向value，相当于黑桶和白桶都指向同一份数据
+		e.storeLocked(&amp;value)
+	} else if e, ok := m.dirty[key]; ok {
+		//如果白桶里面没有这个key，但是黑桶里面有，直接更新黑桶里面的数据
+		e.storeLocked(&amp;value)
+	} else {
+		//白桶和黑桶都没有这个key
+		if !read.amended {
+			//如果黑桶刚刚被收拾过，白条“已收拾”，则需要将白桶里的数据，复制一份到黑桶
+			m.dirtyLocked()
+			//设置白条为“欠收拾”
+			m.read.Store(readOnly{m: read.m, amended: true})
+		}
+		//将新数据丢到黑桶
+		m.dirty[key] = newEntry(value)
+	}
+	m.mu.Unlock()
+}
+
+//tryStore就是一个基于CAS的原子写操作
+func (e *entry) tryStore(i *interface{}) bool {
+	for {
+		p := atomic.LoadPointer(&amp;e.p)
+		//如果原先key对应的值是一个interface{}空对象，返回失败
+		if p == expunged {
+			return false
+		}
+		//CAS原子写入entity
+		if atomic.CompareAndSwapPointer(&amp;e.p, p, unsafe.Pointer(i)) {
+			return true
+		}
+	}
+}
+
+//判断entry是否=expunged（interface{}）,如果是将entry设置为nil
+func (e *entry) unexpungeLocked() (wasExpunged bool) {
+	return atomic.CompareAndSwapPointer(&amp;e.p, expunged, nil)
+}
+
+//原子写入entry
+func (e *entry) storeLocked(i *interface{}) {
+	atomic.StorePointer(&amp;e.p, unsafe.Pointer(i))
+}
+
+//参照Store
+func (m *Map) LoadOrStore(key, value interface{}) (actual interface{}, loaded bool) {
+	read, _ := m.read.Load().(readOnly)
+	if e, ok := read.m[key]; ok {
+		actual, loaded, ok := e.tryLoadOrStore(value)
+		if ok {
+			return actual, loaded
+		}
+	}
+
+	m.mu.Lock()
+	read, _ = m.read.Load().(readOnly)
+	if e, ok := read.m[key]; ok {
+		if e.unexpungeLocked() {
+			m.dirty[key] = e
+		}
+		actual, loaded, _ = e.tryLoadOrStore(value)
+	} else if e, ok := m.dirty[key]; ok {
+		actual, loaded, _ = e.tryLoadOrStore(value)
+		m.missLocked()
+	} else {
+		if !read.amended {
+			m.dirtyLocked()
+			m.read.Store(readOnly{m: read.m, amended: true})
+		}
+		m.dirty[key] = newEntry(value)
+		actual, loaded = value, false
+	}
+	m.mu.Unlock()
+
+	return actual, loaded
+}
+
+func (e *entry) tryLoadOrStore(i interface{}) (actual interface{}, loaded, ok bool) {
+	p := atomic.LoadPointer(&amp;e.p)
+	if p == expunged {
+		return nil, false, false
+	}
+	if p != nil {
+		return *(*interface{})(p), true, true
+	}
+
+	ic := i
+	for {
+		if atomic.CompareAndSwapPointer(&amp;e.p, nil, unsafe.Pointer(&amp;ic)) {
+			return i, false, true
+		}
+		p = atomic.LoadPointer(&amp;e.p)
+		if p == expunged {
+			return nil, false, false
+		}
+		if p != nil {
+			return *(*interface{})(p), true, true
+		}
+	}
+}
+
+func (m *Map) Delete(key interface{}) {
+	read, _ := m.read.Load().(readOnly)
+	//数据在白桶，直接删除白桶里面的数据
+	e, ok := read.m[key]
+	if !ok &amp;&amp; read.amended {
+		m.mu.Lock()
+		read, _ = m.read.Load().(readOnly)
+		e, ok = read.m[key]
+		//数据不在白桶，黑桶“欠收拾”
+		if !ok &amp;&amp; read.amended {
+			//直接黑桶清除数据
+			delete(m.dirty, key)
+		}
+		m.mu.Unlock()
+	}
+	if ok {
+		e.delete()
+	}
+}
+
+func (e *entry) delete() (hadValue bool) {
+	for {
+		p := atomic.LoadPointer(&amp;e.p)
+		if p == nil || p == expunged {
+			return false
+		}
+		if atomic.CompareAndSwapPointer(&amp;e.p, p, nil) {
+			return true
+		}
+	}
+}
+
+func (m *Map) Range(f func(key, value interface{}) bool) {
+	read, _ := m.read.Load().(readOnly)
+	if read.amended {
+		m.mu.Lock()
+		read, _ = m.read.Load().(readOnly)
+		if read.amended {
+			read = readOnly{m: m.dirty}
+			m.read.Store(read)
+			m.dirty = nil
+			m.misses = 0
+		}
+		m.mu.Unlock()
+	}
+
+	for k, e := range read.m {
+		v, ok := e.load()
+		if !ok {
+			continue
+		}
+		if !f(k, v) {
+			break
+		}
+	}
+}
+
+//脏值+1,
+func (m *Map) missLocked() {
+    //脏值+1,
+	m.misses++
+    //如果脏值比黑桶数据数量还大，则收拾黑桶
+	if m.misses &lt; len(m.dirty) {
+		return
+	}
+	m.read.Store(readOnly{m: m.dirty})
+	//将黑桶map清空
+	m.dirty = nil
+	//将脏值清零
+	m.misses = 0
+}
+
+func (m *Map) dirtyLocked() {
+	if m.dirty != nil {
+		return
+	}
+
+	//黑桶已经被清洗过了，这里要重新初始化黑桶
+	read, _ := m.read.Load().(readOnly)
+	m.dirty = make(map[interface{}]*entry, len(read.m))
+    //将白桶里面的复制一份到黑桶
+	for k, e := range read.m {
+		if !e.tryExpungeLocked() {
+			m.dirty[k] = e
+		}
+	}
+}
+
+//这里就是判断entry是不是指向空对象或者是nil
+//如果entry=是nil，赋值为空对象,也返回true
+func (e *entry) tryExpungeLocked() (isExpunged bool) {
+	p := atomic.LoadPointer(&amp;e.p)
+	for p == nil {
+		//如果entry指向nil，给entry赋值空对象interface{},返回true
+		if atomic.CompareAndSwapPointer(&amp;e.p, nil, expunged) {
+			return true
+		}
+		p = atomic.LoadPointer(&amp;e.p)
+	}
+	return p == expunged
+}
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+                            <a rel="next prefetch" href="nsq源码-channel.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+                    <a rel="next prefetch" href="nsq源码-channel.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
